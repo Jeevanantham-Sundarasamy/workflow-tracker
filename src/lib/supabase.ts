@@ -1,6 +1,6 @@
 // Toggle between mock (local) and real Supabase
 // Set USE_MOCK = true for local testing, false for Supabase
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 import { createClient } from "@supabase/supabase-js";
 import { mockSupabase } from "./mockData";
