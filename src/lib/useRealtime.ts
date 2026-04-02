@@ -18,7 +18,8 @@ export function useRealtime(table: string, callback: Callback) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table },
-        (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
           callback({
             eventType: payload.eventType as "INSERT" | "UPDATE" | "DELETE",
             new: payload.new || {},

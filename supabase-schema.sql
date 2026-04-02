@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   location_gps text,
   created_by text DEFAULT 'admin',
   role text DEFAULT 'admin',
+  assigned_to text,
+  assigned_to_type text DEFAULT 'supervisor',
+  assigned_by text,
   created_at timestamptz DEFAULT now()
 );
 
@@ -27,8 +30,12 @@ CREATE POLICY "Allow all for tasks" ON tasks FOR ALL USING (true) WITH CHECK (tr
 CREATE TABLE IF NOT EXISTS supervisors (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text UNIQUE NOT NULL,
+  pin text,
   created_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE supervisors ADD COLUMN IF NOT EXISTS pin text;
+ALTER TABLE supervisors ADD COLUMN IF NOT EXISTS department text;
 
 ALTER TABLE supervisors ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for supervisors" ON supervisors;
@@ -49,6 +56,33 @@ ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for settings" ON settings;
 CREATE POLICY "Allow all for settings" ON settings FOR ALL USING (true) WITH CHECK (true);
 
+-- 0d. Employees table
+CREATE TABLE IF NOT EXISTS employees (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL,
+  pin text,
+  supervisor_name text,
+  phone text,
+  designation text,
+  department text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS department text;
+
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for employees" ON employees;
+CREATE POLICY "Allow all for employees" ON employees FOR ALL USING (true) WITH CHECK (true);
+
+-- Add new columns to tasks table (safe for existing tables)
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS location text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS location_gps text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by text DEFAULT 'admin';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS role text DEFAULT 'admin';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_to text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_to_type text DEFAULT 'supervisor';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by text;
+
 -- 10. Leave requests table
 CREATE TABLE IF NOT EXISTS leave_requests (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -66,17 +100,11 @@ ALTER TABLE leave_requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for leave_requests" ON leave_requests;
 CREATE POLICY "Allow all for leave_requests" ON leave_requests FOR ALL USING (true) WITH CHECK (true);
 
--- 1. Add new columns to tasks table (safe for existing tables)
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS location text;
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS location_gps text;
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by text DEFAULT 'admin';
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS role text DEFAULT 'admin';
-
 -- 2. Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   message text NOT NULL,
-  type text DEFAULT 'info', -- info, success, warning, error
+  type text DEFAULT 'info',
   related_task_id uuid REFERENCES tasks(id) ON DELETE SET NULL,
   read boolean DEFAULT false,
   created_at timestamptz DEFAULT now()
@@ -95,7 +123,7 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE TABLE IF NOT EXISTS activity_log (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   task_id uuid REFERENCES tasks(id) ON DELETE CASCADE,
-  action text NOT NULL, -- created, updated, status_changed, assigned, commented, file_uploaded
+  action text NOT NULL,
   details text,
   actor text DEFAULT 'Admin',
   created_at timestamptz DEFAULT now()
@@ -116,13 +144,12 @@ CREATE TABLE IF NOT EXISTS attachments (
 -- 6. Roles table (for RBAC)
 CREATE TABLE IF NOT EXISTS user_roles (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  name text UNIQUE NOT NULL, -- admin, manager, supervisor
+  name text UNIQUE NOT NULL,
   pin text NOT NULL,
   permissions jsonb DEFAULT '[]'::jsonb,
   created_at timestamptz DEFAULT now()
 );
 
--- Insert default roles
 INSERT INTO user_roles (name, pin, permissions)
 VALUES
   ('admin', '1234', '["all"]'::jsonb),
@@ -130,31 +157,32 @@ VALUES
   ('supervisor', '0000', '["view_own","update_status","comment"]'::jsonb)
 ON CONFLICT (name) DO NOTHING;
 
--- 7. Enable Realtime for key tables (ignore errors if already added)
+-- 7. Enable Realtime for key tables
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE tasks; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE notifications; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE comments; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE activity_log; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE leave_requests; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE supervisors; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE employees; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- 8. Create storage bucket for attachments
--- (Run this separately in Supabase Dashboard > Storage > New Bucket)
--- Bucket name: task-attachments
--- Public: true
-
--- 9. RLS Policies (keep open for anon key since no auth)
+-- 9. RLS Policies
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for notifications" ON notifications;
 CREATE POLICY "Allow all for notifications" ON notifications FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for comments" ON comments;
 CREATE POLICY "Allow all for comments" ON comments FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for activity_log" ON activity_log;
 CREATE POLICY "Allow all for activity_log" ON activity_log FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for attachments" ON attachments;
 CREATE POLICY "Allow all for attachments" ON attachments FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for user_roles" ON user_roles;
 CREATE POLICY "Allow all for user_roles" ON user_roles FOR ALL USING (true) WITH CHECK (true);

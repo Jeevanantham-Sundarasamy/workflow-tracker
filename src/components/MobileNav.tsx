@@ -11,19 +11,27 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
-const allItems = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboard, managerOnly: true },
-  { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, managerOnly: false },
-  { label: "Leave", href: "/dashboard/leave", icon: Palmtree, managerOnly: false },
-  { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, managerOnly: true },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, managerOnly: true },
+type Access = "all" | "logged_in" | "manager_only" | "not_employee";
+
+const allItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
+  { label: "Home", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
+  { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
+  { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
+  { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "manager_only" },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
-  const { isManager } = useAuth();
+  const { isManager, isSupervisor, isLoggedIn } = useAuth();
 
-  const items = allItems.filter((item) => !item.managerOnly || isManager);
+  const items = allItems.filter((item) => {
+    if (item.access === "all") return true;
+    if (item.access === "logged_in") return isLoggedIn;
+    if (item.access === "manager_only") return isManager;
+    if (item.access === "not_employee") return isManager || isSupervisor;
+    return false;
+  });
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 px-2 pb-safe">

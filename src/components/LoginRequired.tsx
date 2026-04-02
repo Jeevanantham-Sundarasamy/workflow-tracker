@@ -4,19 +4,17 @@ import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function ManagerOnly({ children }: { children: React.ReactNode }) {
-  const { isManager, isLoggedIn } = useAuth();
+export default function LoginRequired({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoggedIn) {
       router.replace("/");
-    } else if (!isManager) {
-      router.replace("/dashboard/tasks");
     }
-  }, [isManager, isLoggedIn, router]);
+  }, [isLoggedIn, router]);
 
-  if (!isManager) return null;
+  if (!isLoggedIn) return null;
 
   return <>{children}</>;
 }

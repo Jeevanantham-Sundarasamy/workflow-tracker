@@ -21,8 +21,9 @@ const statusStyle = {
 
 export default function LeavePage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, isSupervisor, isEmployee, userName, login } = useAuth();
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [teamEmployees, setTeamEmployees] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -44,7 +45,6 @@ export default function LeavePage() {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) {
-        // Table doesn't exist yet
         if (error.code === "42P01" || error.message?.includes("does not exist")) {
           setTableError(true);
         }
@@ -55,7 +55,18 @@ export default function LeavePage() {
     } catch {
       // Keep leaves empty if table not found
     }
-  }, []);
+
+    // Load team employees for supervisor
+    if (isSupervisor && userName) {
+      try {
+        const { data } = await supabase
+          .from("employees")
+          .select("name")
+          .eq("supervisor_name", userName);
+        setTeamEmployees((data || []).map((e: { name: string }) => e.name));
+      } catch { /* ignore */ }
+    }
+  }, [isSupervisor, userName]);
 
   useEffect(() => {
     loadData();
@@ -63,15 +74,73 @@ export default function LeavePage() {
     return () => clearInterval(i);
   }, [loadData]);
 
+  // Role-based filtering
+  const roleFiltered = leaves.filter((l) => {
+    if (isManager) return true;
+    if (isSupervisor) {
+      // Supervisor sees their own leave + their team's leave
+      return l.employee_name === userName || teamEmployees.includes(l.employee_name);
+    }
+    if (isEmployee) {
+      // Employee sees only their own
+      return l.employee_name === userName;
+    }
+    return true; // guest sees all
+  });
+
   const filtered = filterStatus === "All"
-    ? leaves
-    : leaves.filter((l) => l.status === filterStatus);
+    ? roleFiltered
+    : roleFiltered.filter((l) => l.status === filterStatus);
+
+  // This week's leaves (Mon-Sun)
+  const getWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    mon.setHours(0, 0, 0, 0);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    sun.setHours(23, 59, 59, 999);
+    return { mon, sun };
+  };
+  const { mon: weekStart, sun: weekEnd } = getWeekRange();
+  const thisWeekLeaves = roleFiltered.filter((l) => {
+    const from = new Date(l.from_date);
+    const to = new Date(l.to_date);
+    return from <= weekEnd && to >= weekStart;
+  });
 
   const stats = {
-    total: leaves.length,
-    pending: leaves.filter((l) => l.status === "Pending").length,
-    approved: leaves.filter((l) => l.status === "Approved").length,
-    rejected: leaves.filter((l) => l.status === "Rejected").length,
+    total: roleFiltered.length,
+    pending: roleFiltered.filter((l) => l.status === "Pending").length,
+    approved: roleFiltered.filter((l) => l.status === "Approved").length,
+    rejected: roleFiltered.filter((l) => l.status === "Rejected").length,
+  };
+
+  // Can this user approve/reject a leave?
+  const canApprove = (leave: LeaveRequest) => {
+    if (isManager) return true;
+    if (isSupervisor && leave.employee_name !== userName && teamEmployees.includes(leave.employee_name)) return true;
+    return false;
+  };
+
+  // Can this user delete a leave?
+  const canDelete = (leave: LeaveRequest) => {
+    if (isManager) return true;
+    return false;
+  };
+
+  // Auto-fill employee name for logged in users
+  const openApplyModal = () => {
+    setForm({
+      employee_name: (isEmployee || isSupervisor) && userName ? userName : "",
+      leave_type: "Casual",
+      from_date: "",
+      to_date: "",
+      reason: "",
+    });
+    setModalOpen(true);
   };
 
   const handleApply = async () => {
@@ -101,7 +170,6 @@ export default function LeavePage() {
     setSubmitting(false);
 
     if (error) {
-      console.error("Leave submit error:", error);
       if (error.code === "42P01" || error.message?.includes("does not exist")) {
         toast("Leave table not found. Run the SQL schema first.", "error");
         setTableError(true);
@@ -115,17 +183,17 @@ export default function LeavePage() {
       setLeaves((p) => [data, ...p]);
     }
     toast("Leave request submitted!", "success");
-    setForm({ employee_name: "", leave_type: "Casual", from_date: "", to_date: "", reason: "" });
     setModalOpen(false);
   };
 
   const handleAction = async (id: string, status: "Approved" | "Rejected") => {
+    const approver = userName || "Manager";
     const { error } = await supabase
       .from("leave_requests")
-      .update({ status, approved_by: "Manager" })
+      .update({ status, approved_by: approver })
       .eq("id", id);
     if (!error) {
-      setLeaves((p) => p.map((l) => (l.id === id ? { ...l, status, approved_by: "Manager" } : l)));
+      setLeaves((p) => p.map((l) => (l.id === id ? { ...l, status, approved_by: approver } : l)));
       toast(`Leave ${status.toLowerCase()}`, status === "Approved" ? "success" : "warning");
     } else {
       toast("Action failed", "error");
@@ -146,23 +214,20 @@ export default function LeavePage() {
     return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1);
   };
 
+  // Can apply leave: supervisors and employees
+  const canApplyLeave = isSupervisor || isEmployee || !userName;
+
   return (
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
       <div className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
-        {/* Table not found warning */}
         {tableError && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-xs font-bold text-amber-800">Leave table not found in Supabase</p>
-              <p className="text-[11px] text-amber-600 mt-0.5">
-                Run this SQL in Supabase SQL Editor:
-              </p>
-              <code className="text-[10px] text-amber-700 bg-amber-100 px-2 py-1 rounded mt-1 block">
-                CREATE TABLE leave_requests (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, employee_name text NOT NULL, leave_type text DEFAULT &apos;Casual&apos;, from_date date NOT NULL, to_date date NOT NULL, reason text, status text DEFAULT &apos;Pending&apos;, approved_by text, created_at timestamptz DEFAULT now());
-              </code>
+              <p className="text-[11px] text-amber-600 mt-0.5">Run the SQL schema in Supabase SQL Editor.</p>
             </div>
           </div>
         )}
@@ -171,12 +236,16 @@ export default function LeavePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Leave Planner</h1>
-            <p className="text-sm text-gray-400">Apply and track leave requests</p>
+            <p className="text-sm text-gray-400">
+              {isEmployee ? "Your leave requests" : isSupervisor ? "Team leave requests" : "All leave requests"}
+            </p>
           </div>
-          <button onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
-            <Plus className="w-4 h-4" /> Apply Leave
-          </button>
+          {canApplyLeave && (
+            <button onClick={openApplyModal}
+              className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
+              <Plus className="w-4 h-4" /> Apply Leave
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -192,6 +261,45 @@ export default function LeavePage() {
               <p className={`text-2xl font-black ${s.color}`}>{s.count}</p>
             </div>
           ))}
+        </div>
+
+        {/* This Week's Leave */}
+        <div className="bg-white rounded-2xl border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary-600" />
+              This Week&apos;s Leave
+            </h2>
+            <span className="text-[10px] font-bold text-gray-400 uppercase">
+              {weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </span>
+          </div>
+          {thisWeekLeaves.length > 0 ? (
+            <div className="space-y-2">
+              {thisWeekLeaves.map((l) => {
+                const st = statusStyle[l.status];
+                const StIcon = st.icon;
+                return (
+                  <div key={l.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-gray-50 border border-border-light">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg ${st.bg} flex items-center justify-center flex-shrink-0`}>
+                        <StIcon className={`w-3.5 h-3.5 ${st.text}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-900 truncate">{l.employee_name}</p>
+                        <p className="text-[10px] text-gray-400">{l.leave_type} · {l.from_date} → {l.to_date}</p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${st.bg} ${st.text} ${st.border}`}>
+                      {l.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-4">No leave this week</p>
+          )}
         </div>
 
         {/* Filter */}
@@ -213,6 +321,8 @@ export default function LeavePage() {
           {filtered.length ? filtered.map((l) => {
             const st = statusStyle[l.status];
             const StIcon = st.icon;
+            const showApproval = canApprove(l);
+            const showDelete = canDelete(l);
             return (
               <div key={l.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition">
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -248,10 +358,10 @@ export default function LeavePage() {
                   </div>
                 )}
 
-                {/* Manager only: Approve/Reject + Delete */}
-                {isManager && (
+                {/* Approve/Reject + Delete */}
+                {(showApproval || showDelete) && (
                   <div className="flex gap-2 pt-1 flex-wrap">
-                    {l.status === "Pending" && (
+                    {showApproval && l.status === "Pending" && (
                       <>
                         <button onClick={() => handleAction(l.id, "Approved")}
                           className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition">
@@ -263,10 +373,12 @@ export default function LeavePage() {
                         </button>
                       </>
                     )}
-                    <button onClick={() => handleDelete(l.id)}
-                      className="text-[10px] font-semibold text-gray-400 hover:text-red-500 transition ml-auto">
-                      Delete
-                    </button>
+                    {showDelete && (
+                      <button onClick={() => handleDelete(l.id)}
+                        className="text-[10px] font-semibold text-gray-400 hover:text-red-500 transition ml-auto">
+                        Delete
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -300,7 +412,8 @@ export default function LeavePage() {
                 <input type="text" value={form.employee_name}
                   onChange={(e) => setForm({ ...form, employee_name: e.target.value })}
                   placeholder="Your full name"
-                  className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                  readOnly={!!(isEmployee && userName)}
+                  className={`w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 ${isEmployee && userName ? "bg-gray-50 text-gray-600" : ""}`} />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Leave Type</label>
@@ -351,7 +464,7 @@ export default function LeavePage() {
       )}
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>
   );
 }

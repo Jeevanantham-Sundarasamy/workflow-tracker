@@ -4,17 +4,33 @@ export interface Task {
   supervisor: string;
   priority: "High" | "Medium" | "Low";
   due_date: string;
-  status: "Pending" | "Done" | "Delayed";
+  status: "Pending" | "In Progress" | "Done" | "Delayed" | "On Hold" | "Cancelled";
   follow_up: string | null;
   location: string | null;
   location_gps: string | null;
   created_by: string;
+  assigned_to: string | null;
+  assigned_to_type: "supervisor" | "employee" | null;
+  assigned_by: string | null;
   created_at: string;
 }
 
 export interface Supervisor {
   id: string;
   name: string;
+  pin: string | null;
+  department: string | null;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  pin: string | null;
+  supervisor_name: string | null;
+  phone: string | null;
+  designation: string | null;
+  department: string | null;
+  created_at: string;
 }
 
 export interface Notification {
@@ -62,8 +78,6 @@ export interface UserRole {
   created_at: string;
 }
 
-export type Role = "admin" | "manager" | "supervisor";
-
 export interface LeaveRequest {
   id: string;
   employee_name: string;
@@ -76,16 +90,19 @@ export interface LeaveRequest {
   created_at: string;
 }
 
+export type Role = "guest" | "manager" | "supervisor" | "employee";
+
 export const LEAVE_TYPES = ["Casual", "Sick", "Earned", "Compensatory", "Other"] as const;
 export const LEAVE_STATUSES = ["Pending", "Approved", "Rejected"] as const;
 
-export const STATUSES = ["Pending", "Done", "Delayed"] as const;
+export const STATUSES = ["Pending", "In Progress", "Done", "Delayed", "On Hold", "Cancelled"] as const;
 export const PRIORITIES = ["High", "Medium", "Low"] as const;
 
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: "Admin",
+  guest: "Guest",
   manager: "Manager",
   supervisor: "Supervisor",
+  employee: "Employee",
 };
 
 export function hasPermission(permissions: string[], action: string): boolean {

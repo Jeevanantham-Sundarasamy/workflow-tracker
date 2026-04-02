@@ -8,13 +8,13 @@ import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import { ChevronLeft, ChevronRight, Clock, User, Flag } from "lucide-react";
-import ManagerOnly from "@/components/ManagerOnly";
-const statusDot = { Pending: "bg-amber-400", Done: "bg-emerald-400", Delayed: "bg-red-400" };
+import LoginRequired from "@/components/LoginRequired";
+const statusDot: Record<string, string> = { Pending: "bg-amber-400", "In Progress": "bg-blue-400", Done: "bg-emerald-400", Delayed: "bg-red-400", "On Hold": "bg-orange-400", Cancelled: "bg-gray-400" };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function CalendarPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
@@ -36,7 +36,13 @@ export default function CalendarPage() {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date().toISOString().split("T")[0];
   const monthLabel = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const getTasksForDate = (d: string) => tasks.filter((t) => t.due_date === d);
+  // Role-based filtering
+  const roleFiltered = tasks.filter((t) => {
+    if (isManager) return true;
+    if (isSupervisor) return t.supervisor === userName;
+    return true;
+  });
+  const getTasksForDate = (d: string) => roleFiltered.filter((t) => t.due_date === d);
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -44,7 +50,7 @@ export default function CalendarPage() {
   const selectedTasks = selectedDate ? getTasksForDate(selectedDate) : [];
 
   return (
-    <ManagerOnly>
+    <LoginRequired>
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
@@ -118,8 +124,8 @@ export default function CalendarPage() {
       </div>
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>
-    </ManagerOnly>
+    </LoginRequired>
   );
 }

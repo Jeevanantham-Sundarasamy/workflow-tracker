@@ -9,6 +9,7 @@ interface TaskModalProps {
   open: boolean;
   task: Task | null;
   supervisors: string[];
+  employees?: { name: string; supervisor_name: string | null }[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -18,6 +19,7 @@ export default function TaskModal({
   open,
   task,
   supervisors,
+  employees = [],
   roleName = "Admin",
   onClose,
   onSave,
@@ -31,6 +33,8 @@ export default function TaskModal({
     follow_up: "",
     location: "",
     location_gps: "",
+    assigned_to: "" as string,
+    assigned_to_type: "supervisor" as "supervisor" | "employee",
   });
 
   useEffect(() => {
@@ -44,6 +48,8 @@ export default function TaskModal({
         follow_up: task.follow_up || "",
         location: task.location || "",
         location_gps: task.location_gps || "",
+        assigned_to: task.assigned_to || "",
+        assigned_to_type: task.assigned_to_type || "supervisor",
       });
     } else {
       setForm({
@@ -55,11 +61,18 @@ export default function TaskModal({
         follow_up: "",
         location: "",
         location_gps: "",
+        assigned_to: "",
+        assigned_to_type: "supervisor",
       });
     }
   }, [task, open, supervisors]);
 
   if (!open) return null;
+
+  // Get employees for selected supervisor
+  const filteredEmployees = employees.filter(
+    (e) => e.supervisor_name === form.supervisor
+  );
 
   const handleSubmit = () => {
     if (!form.task.trim() || !form.due_date) {
@@ -76,6 +89,9 @@ export default function TaskModal({
       location: form.location || null,
       location_gps: form.location_gps || null,
       created_by: roleName,
+      assigned_to: form.assigned_to || null,
+      assigned_to_type: form.assigned_to ? form.assigned_to_type : null,
+      assigned_by: roleName,
     });
   };
 
@@ -134,11 +150,11 @@ export default function TaskModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                Assign To
+                Supervisor
               </label>
               <select
                 value={form.supervisor}
-                onChange={(e) => setForm({ ...form, supervisor: e.target.value })}
+                onChange={(e) => setForm({ ...form, supervisor: e.target.value, assigned_to: "" })}
                 className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
               >
                 {supervisors.map((s) => (
@@ -161,6 +177,25 @@ export default function TaskModal({
               </select>
             </div>
           </div>
+
+          {/* Assign to Employee (optional) */}
+          {filteredEmployees.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Assign to Employee <span className="normal-case text-gray-300">(optional)</span>
+              </label>
+              <select
+                value={form.assigned_to}
+                onChange={(e) => setForm({ ...form, assigned_to: e.target.value, assigned_to_type: e.target.value ? "employee" : "supervisor" })}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+              >
+                <option value="">Supervisor only</option>
+                {filteredEmployees.map((e) => (
+                  <option key={e.name} value={e.name}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Row: Due Date + Status */}
           <div className="grid grid-cols-2 gap-3">

@@ -8,10 +8,13 @@ interface SupervisorGridProps {
   tasks: Task[];
 }
 
-const dotColor = {
+const dotColor: Record<string, string> = {
   Pending: "bg-amber-400",
+  "In Progress": "bg-blue-400",
   Done: "bg-emerald-400",
   Delayed: "bg-red-400",
+  "On Hold": "bg-orange-400",
+  Cancelled: "bg-gray-400",
 };
 
 export default function SupervisorGrid({

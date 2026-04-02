@@ -17,14 +17,14 @@ import PinModal from "@/components/PinModal";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, Download, Upload, Filter } from "lucide-react";
-import ManagerOnly from "@/components/ManagerOnly";
+import LoginRequired from "@/components/LoginRequired";
 
 export default function DashboardPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
-  const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
+  const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -35,20 +35,26 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr] = await Promise.all([
+      const [tr, sr, er] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
+        supabase.from("employees").select("name, supervisor_name").order("name"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
       setTasks(tr.data || []);
-      setSupervisors((sr.data || []).map((s) => s.name));
-      setConnection("live");
-    } catch { setConnection("offline"); }
+      setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
+      setEmployees(er.data || []);
+    } catch { /* offline */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); const i = setInterval(loadData, 30000); return () => clearInterval(i); }, [loadData]);
+  useEffect(() => {
+    loadData();
+    if (taskModalOpen || detailTask) return;
+    const i = setInterval(loadData, 30000);
+    return () => clearInterval(i);
+  }, [loadData, taskModalOpen, detailTask]);
 
   useRealtime("tasks", useCallback((payload) => {
     if (payload.eventType === "INSERT") setTasks((p) => [payload.new as Task, ...p]);
@@ -57,25 +63,41 @@ export default function DashboardPage() {
   }, []));
 
   useEffect(() => {
-    const off = () => setConnection("offline");
+    const off = () => {};
     const on = () => loadData();
     window.addEventListener("offline", off);
     window.addEventListener("online", on);
     return () => { window.removeEventListener("offline", off); window.removeEventListener("online", on); };
   }, [loadData]);
 
-  const filtered = tasks.filter(
+  // Role-based filtering
+  const roleFiltered = tasks.filter((t) => {
+    if (isManager) return true;
+    if (isSupervisor) return t.supervisor === userName;
+    return true;
+  });
+
+  const filtered = roleFiltered.filter(
     (t) => (filterStatus === "All" || t.status === filterStatus) && (filterSup === "All" || t.supervisor === filterSup)
   );
 
-  const handleStatusChange = async (id: string, status: string) => {
+  const canCreateTask = isManager || isSupervisor;
+  const canEditTask = isManager || isSupervisor;
+  const canDeleteTask = isManager;
+  const roleName = userName || "Manager";
+
+  const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"] } : t)));
     await supabase.from("tasks").update({ status }).eq("id", id);
     toast("Status updated", "success");
     if (task) {
-      await logActivity(id, "status_changed", `${task.status} → ${status}`, isManager ? "Manager" : "Supervisor");
+      const details = comment ? `${task.status} → ${status} | ${comment}` : `${task.status} → ${status}`;
+      await logActivity(id, "status_changed", details, roleName);
       await createNotification(`"${task.task}" status → ${status}`, "info", id);
+      if (comment) {
+        await supabase.from("comments").insert({ task_id: id, author: roleName, message: `[Status → ${status}] ${comment}` });
+      }
     }
   };
 
@@ -92,12 +114,12 @@ export default function DashboardPage() {
     if (editingTask) {
       const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", editingTask.id).select().single();
       if (!error && updated) { setTasks((p) => p.map((t) => (t.id === editingTask.id ? updated : t))); toast("Task updated", "success");
-        await logActivity(editingTask.id, "updated", `Updated "${data.task}"`, "Manager"); }
+        await logActivity(editingTask.id, "updated", `Updated "${data.task}"`, roleName); }
       else toast("Update failed", "error");
     } else {
       const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
       if (!error && created) { setTasks((p) => [created, ...p]); toast("Task created", "success");
-        await logActivity(created.id, "created", `Created "${data.task}"`, "Manager");
+        await logActivity(created.id, "created", `Created "${data.task}"`, roleName);
         await createNotification(`New task "${data.task}" → ${data.supervisor}`, "success", created.id); }
       else toast("Creation failed", "error");
     }
@@ -124,27 +146,37 @@ export default function DashboardPage() {
     e.target.value = "";
   };
 
+  const modalSupervisors = isSupervisor && !isManager ? [userName!] : supervisors;
+  const modalEmployees = isSupervisor && !isManager
+    ? employees.filter((e) => e.supervisor_name === userName)
+    : employees;
+
   return (
-    <ManagerOnly>
+    <LoginRequired>
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
       <div className="flex-1 p-4 sm:p-6 space-y-6 max-w-7xl mx-auto w-full">
         {loading ? <DashboardSkeleton /> : (
           <>
-            <StatsCards tasks={tasks} activeFilter={filterStatus} onFilter={setFilterStatus} />
+            <StatsCards tasks={roleFiltered} activeFilter={filterStatus} onFilter={setFilterStatus} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                  <h2 className="text-base font-bold text-gray-900 mr-auto">Tasks <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span></h2>
-                  <div className="flex items-center gap-1.5">
-                    <Filter className="w-3.5 h-3.5 text-gray-400" />
-                    <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
-                      <option value="All">All Supervisors</option>
-                      {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
+                  <h2 className="text-base font-bold text-gray-900 mr-auto">
+                    {isSupervisor && !isManager ? "Team Tasks" : "Tasks"}
+                    <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span>
+                  </h2>
+                  {isManager && (
+                    <div className="flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5 text-gray-400" />
+                      <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                        <option value="All">All Supervisors</option>
+                        {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  )}
                   {isManager && (
                     <>
                       <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
@@ -152,15 +184,17 @@ export default function DashboardPage() {
                       <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition cursor-pointer">
                         <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Import</span>
                         <input type="file" accept=".json" className="hidden" onChange={handleImport} /></label>
-                      <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-xl transition shadow-sm">
-                        <Plus className="w-3.5 h-3.5" /> New Task</button>
                     </>
+                  )}
+                  {canCreateTask && (
+                    <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-xl transition shadow-sm">
+                      <Plus className="w-3.5 h-3.5" /> New Task</button>
                   )}
                 </div>
                 <div className="space-y-3">
                   {filtered.length ? filtered.map((t) => (
-                    <TaskCard key={t.id} task={t} canEdit={isManager} canDelete={isManager} canChangeStatus={true}
+                    <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask} canChangeStatus={true}
                       onStatusChange={handleStatusChange}
                       onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                       onDelete={handleDelete} onViewDetail={(task) => setDetailTask(task)} />
@@ -170,19 +204,20 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-              <div className="space-y-4"><StatusChart tasks={tasks} /></div>
+              <div className="space-y-4"><StatusChart tasks={roleFiltered} /></div>
             </div>
-            <SupervisorGrid supervisors={supervisors} tasks={tasks} />
+            {isManager && <SupervisorGrid supervisors={supervisors} tasks={tasks} />}
           </>
         )}
       </div>
 
-      <TaskModal open={taskModalOpen} task={editingTask} supervisors={supervisors} roleName="Manager"
+      <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
+        employees={modalEmployees} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
-      <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={isManager ? "Manager" : "Supervisor"} />
+      <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>
-    </ManagerOnly>
+    </LoginRequired>
   );
 }

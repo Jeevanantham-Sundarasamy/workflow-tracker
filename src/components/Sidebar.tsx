@@ -13,26 +13,37 @@ import {
   ChevronLeft,
   ChevronRight,
   Workflow,
+  UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
-const allNavItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, managerOnly: true },
-  { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, managerOnly: false },
-  { label: "Supervisors", href: "/dashboard/supervisors", icon: Users, managerOnly: true },
-  { label: "Leave", href: "/dashboard/leave", icon: Palmtree, managerOnly: false },
-  { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, managerOnly: true },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, managerOnly: true },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, managerOnly: true },
+type Access = "all" | "logged_in" | "manager_only" | "manager_supervisor" | "not_employee";
+
+const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
+  { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
+  { label: "Supervisors", href: "/dashboard/supervisors", icon: Users, access: "manager_only" },
+  { label: "Employees", href: "/dashboard/employees", icon: UserPlus, access: "manager_supervisor" },
+  { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
+  { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "manager_only" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { isManager } = useAuth();
+  const { isManager, isSupervisor, isLoggedIn } = useAuth();
 
-  const navItems = allNavItems.filter((item) => !item.managerOnly || isManager);
+  const navItems = allNavItems.filter((item) => {
+    if (item.access === "all") return true;
+    if (item.access === "logged_in") return isLoggedIn;
+    if (item.access === "manager_only") return isManager;
+    if (item.access === "manager_supervisor") return isManager || isSupervisor;
+    if (item.access === "not_employee") return isManager || isSupervisor;
+    return false;
+  });
 
   return (
     <aside

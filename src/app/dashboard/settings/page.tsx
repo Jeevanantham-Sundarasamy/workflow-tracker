@@ -8,10 +8,11 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import { Lock, Download, Upload } from "lucide-react";
 import ManagerOnly from "@/components/ManagerOnly";
+import { checkPinUsed } from "@/lib/pinUtils";
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, login, refreshPin } = useAuth();
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
 
@@ -33,12 +34,14 @@ export default function SettingsPage() {
   const handleChangePin = async () => {
     setPinMsg(null);
     if (!curPin || !newPin || !confirmPin) { setPinMsg({ text: "All fields required", error: true }); return; }
-    if (!login(curPin)) { setPinMsg({ text: "Current PIN incorrect", error: true }); return; }
+    if (!(await login(curPin))) { setPinMsg({ text: "Current PIN incorrect", error: true }); return; }
     if (newPin.length < 4) { setPinMsg({ text: "PIN must be at least 4 digits", error: true }); return; }
     if (newPin !== confirmPin) { setPinMsg({ text: "PINs do not match", error: true }); return; }
+    const usedBy = await checkPinUsed(newPin, "manager");
+    if (usedBy) { setPinMsg({ text: `PIN already used by ${usedBy}`, error: true }); return; }
     const { error } = await supabase.from("settings").update({ value: newPin }).eq("key", "admin_pin");
     if (error) setPinMsg({ text: "Save failed", error: true });
-    else { setCurPin(""); setNewPin(""); setConfirmPin(""); setPinMsg({ text: "PIN changed!", error: false }); }
+    else { await refreshPin(); setCurPin(""); setNewPin(""); setConfirmPin(""); setPinMsg({ text: "PIN changed!", error: false }); }
   };
 
   const handleExport = async () => {
@@ -113,7 +116,7 @@ export default function SettingsPage() {
       </div>
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
     </div>
     </ManagerOnly>
   );

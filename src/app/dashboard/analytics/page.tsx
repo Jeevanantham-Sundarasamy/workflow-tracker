@@ -12,12 +12,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { CalendarDays } from "lucide-react";
-import ManagerOnly from "@/components/ManagerOnly";
-const COLORS = { Pending: "#f59e0b", Done: "#10b981", Delayed: "#ef4444" };
+import LoginRequired from "@/components/LoginRequired";
+const COLORS: Record<string, string> = { Pending: "#f59e0b", "In Progress": "#3b82f6", Done: "#10b981", Delayed: "#ef4444", "On Hold": "#f97316", Cancelled: "#94a3b8" };
 
 export default function AnalyticsPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -32,13 +32,20 @@ export default function AnalyticsPage() {
         supabase.from("supervisors").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
-      setTasks(tr.data || []); setSupervisors((sr.data || []).map((s) => s.name)); setConnection("live");
+      setTasks(tr.data || []); setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
     } catch { setConnection("offline"); }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filtered = tasks.filter((t) => {
+  // Role-based filtering
+  const roleFiltered = tasks.filter((t) => {
+    if (isManager) return true;
+    if (isSupervisor) return t.supervisor === userName;
+    return true;
+  });
+
+  const filtered = roleFiltered.filter((t) => {
     if (dateFrom && t.due_date < dateFrom) return false;
     if (dateTo && t.due_date > dateTo) return false;
     return true;
@@ -47,12 +54,13 @@ export default function AnalyticsPage() {
   const today = new Date().toISOString().split("T")[0];
   const total = filtered.length;
   const completionPct = total ? Math.round((filtered.filter((t) => t.status === "Done").length / total) * 100) : 0;
-  const overdueCount = filtered.filter((t) => t.status !== "Done" && t.due_date < today).length;
+  const overdueCount = filtered.filter((t) => t.status !== "Done" && t.status !== "Cancelled" && t.due_date < today).length;
 
   const supChartData = supervisors.map((sup) => {
     const st = filtered.filter((t) => t.supervisor === sup);
     return { name: sup.length > 10 ? sup.slice(0, 10) + "..." : sup,
       Pending: st.filter((t) => t.status === "Pending").length,
+      "In Progress": st.filter((t) => t.status === "In Progress").length,
       Done: st.filter((t) => t.status === "Done").length,
       Delayed: st.filter((t) => t.status === "Delayed").length };
   });
@@ -67,7 +75,7 @@ export default function AnalyticsPage() {
     const d = new Date(); d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
     overdueTrend.push({ date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      overdue: tasks.filter((t) => t.status !== "Done" && t.due_date <= dateStr).length });
+      overdue: roleFiltered.filter((t) => t.status !== "Done" && t.due_date <= dateStr).length });
   }
 
   const priorityData = [
@@ -77,7 +85,7 @@ export default function AnalyticsPage() {
   ].filter((d) => d.value > 0);
 
   return (
-    <ManagerOnly>
+    <LoginRequired>
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
@@ -104,7 +112,7 @@ export default function AnalyticsPage() {
                 <BarChart data={supChartData} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }} /><Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Pending" fill={COLORS.Pending} radius={[4, 4, 0, 0]} /><Bar dataKey="Done" fill={COLORS.Done} radius={[4, 4, 0, 0]} /><Bar dataKey="Delayed" fill={COLORS.Delayed} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Pending" fill={COLORS.Pending} radius={[4, 4, 0, 0]} /><Bar dataKey="In Progress" fill={COLORS["In Progress"]} radius={[4, 4, 0, 0]} /><Bar dataKey="Done" fill={COLORS.Done} radius={[4, 4, 0, 0]} /><Bar dataKey="Delayed" fill={COLORS.Delayed} radius={[4, 4, 0, 0]} />
                 </BarChart></ResponsiveContainer></div>
             ) : <p className="text-xs text-gray-400 text-center py-12">No data</p>}
           </div>
@@ -145,8 +153,8 @@ export default function AnalyticsPage() {
       </div>
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>
-    </ManagerOnly>
+    </LoginRequired>
   );
 }

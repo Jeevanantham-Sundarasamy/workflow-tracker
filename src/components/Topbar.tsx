@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, LogIn, LogOut, Briefcase } from "lucide-react";
+import { Search, LogIn, LogOut, Briefcase, User, UserCircle } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -9,7 +9,7 @@ interface TopbarProps {
 }
 
 export default function Topbar({ onLoginClick }: TopbarProps) {
-  const { isManager, logout } = useAuth();
+  const { isManager, isSupervisor, isEmployee, isLoggedIn, userName, department, logout } = useAuth();
 
   return (
     <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
@@ -30,24 +30,42 @@ export default function Topbar({ onLoginClick }: TopbarProps) {
       <div className="flex items-center gap-2 sm:gap-3 ml-4">
         <NotificationBell />
 
-        {/* Manager badge */}
+        {/* Role badge */}
         {isManager && (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-primary-50 border-primary-200">
             <Briefcase className="w-3 h-3 text-primary-600" />
             <span className="text-[10px] font-bold text-primary-700">Manager</span>
           </div>
         )}
+        {isSupervisor && userName && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-emerald-50 border-emerald-200">
+            <User className="w-3 h-3 text-emerald-600" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-emerald-700 leading-tight">{userName}</span>
+              {department && <span className="text-[9px] text-emerald-500 leading-tight">{department}</span>}
+            </div>
+          </div>
+        )}
+        {isEmployee && userName && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-blue-50 border-blue-200">
+            <UserCircle className="w-3 h-3 text-blue-600" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-blue-700 leading-tight">{userName}</span>
+              {department && <span className="text-[9px] text-blue-500 leading-tight">{department}</span>}
+            </div>
+          </div>
+        )}
 
         {/* Login / Logout */}
         <button
-          onClick={isManager ? logout : onLoginClick}
+          onClick={isLoggedIn ? () => { logout(); window.location.href = "/"; } : onLoginClick}
           className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition ${
-            isManager
+            isLoggedIn
               ? "bg-gray-50 text-gray-600 border border-border hover:bg-red-50 hover:text-red-600 hover:border-red-200"
               : "bg-primary-600 text-white hover:bg-primary-700"
           }`}
         >
-          {isManager ? (
+          {isLoggedIn ? (
             <>
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Logout</span>
@@ -55,7 +73,7 @@ export default function Topbar({ onLoginClick }: TopbarProps) {
           ) : (
             <>
               <LogIn className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Manager Login</span>
+              <span className="hidden sm:inline">Login</span>
             </>
           )}
         </button>

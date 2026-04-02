@@ -18,9 +18,10 @@ import { Plus, Filter, Search } from "lucide-react";
 
 export default function TasksPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { isManager, isSupervisor, isEmployee, userName, role, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -33,17 +34,26 @@ export default function TasksPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr] = await Promise.all([
+      const [tr, sr, er] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
+        supabase.from("employees").select("name, supervisor_name").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
-      setTasks(tr.data || []); setSupervisors((sr.data || []).map((s) => s.name)); setConnection("live");
+      setTasks(tr.data || []);
+      setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
+      setEmployees(er.data || []);
+      setConnection("live");
     } catch { setConnection("offline"); }
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); const i = setInterval(loadData, 30000); return () => clearInterval(i); }, [loadData]);
+  useEffect(() => {
+    loadData();
+    if (taskModalOpen || detailTask) return;
+    const i = setInterval(loadData, 30000);
+    return () => clearInterval(i);
+  }, [loadData, taskModalOpen, detailTask]);
 
   useRealtime("tasks", useCallback((payload) => {
     if (payload.eventType === "INSERT") setTasks((p) => [payload.new as Task, ...p]);
@@ -51,20 +61,39 @@ export default function TasksPage() {
     else if (payload.eventType === "DELETE") setTasks((p) => p.filter((t) => t.id !== (payload.old as { id: string }).id));
   }, []));
 
-  const filtered = tasks.filter((t) => {
+  // Role-based task filtering
+  const roleFiltered = tasks.filter((t) => {
+    if (isManager) return true;
+    if (isSupervisor) return t.supervisor === userName;
+    if (isEmployee) return t.assigned_to === userName;
+    return true; // guest sees all
+  });
+
+  const filtered = roleFiltered.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const handleStatusChange = async (id: string, status: string) => {
+  const canCreateTask = isManager || isSupervisor;
+  const canEditTask = isManager || isSupervisor;
+  const canDeleteTask = isManager;
+
+  const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"] } : t)));
     await supabase.from("tasks").update({ status }).eq("id", id);
     toast("Status updated", "success");
-    if (task) { await logActivity(id, "status_changed", `${task.status} → ${status}`, isManager ? "Manager" : "Supervisor");
-      await createNotification(`"${task.task}" status → ${status}`, "info", id); }
+    const actor = userName || (isManager ? "Manager" : "Unknown");
+    if (task) {
+      const details = comment ? `${task.status} → ${status} | ${comment}` : `${task.status} → ${status}`;
+      await logActivity(id, "status_changed", details, actor);
+      await createNotification(`"${task.task}" status → ${status}`, "info", id);
+      if (comment) {
+        await supabase.from("comments").insert({ task_id: id, author: actor, message: `[Status → ${status}] ${comment}` });
+      }
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -74,27 +103,41 @@ export default function TasksPage() {
   };
 
   const handleSave = async (data: Omit<Task, "id" | "created_at">) => {
+    const actor = userName || "Manager";
     if (editingTask) {
       const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", editingTask.id).select().single();
       if (!error && updated) { setTasks((p) => p.map((t) => (t.id === editingTask.id ? updated : t))); toast("Task updated", "success"); }
     } else {
       const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
       if (!error && created) { setTasks((p) => [created, ...p]); toast("Task created", "success");
-        await logActivity(created.id, "created", `Created "${data.task}"`, "Manager");
+        await logActivity(created.id, "created", `Created "${data.task}"`, actor);
         await createNotification(`New task "${data.task}" → ${data.supervisor}`, "success", created.id); }
       else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
     }
     setTaskModalOpen(false); setEditingTask(null);
   };
 
+  // For supervisor: only show their supervisors list (just themselves)
+  const modalSupervisors = isSupervisor && !isManager ? [userName!] : supervisors;
+  // For supervisor: only show their team employees
+  const modalEmployees = isSupervisor && !isManager
+    ? employees.filter((e) => e.supervisor_name === userName)
+    : employees;
+
+  const roleName = userName || (isManager ? "Manager" : role === "supervisor" ? "Supervisor" : "Employee");
+
   return (
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
       <div className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-5">
         <div className="flex items-center justify-between">
-          <div><h1 className="text-xl font-bold text-gray-900">All Tasks</h1>
-            <p className="text-sm text-gray-400">{tasks.length} total</p></div>
-          {isManager && (
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              {isEmployee ? "My Tasks" : isSupervisor ? "Team Tasks" : "All Tasks"}
+            </h1>
+            <p className="text-sm text-gray-400">{roleFiltered.length} total</p>
+          </div>
+          {canCreateTask && (
             <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
               className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
               <Plus className="w-4 h-4" /> New Task</button>
@@ -110,28 +153,36 @@ export default function TasksPage() {
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
               className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Status</option>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
-          <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
-            className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
-            <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          {!isEmployee && (
+            <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
+              className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          )}
           <span className="text-xs text-gray-400 font-medium ml-auto">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
         </div>
         <div className="space-y-3">
           {loading ? [...Array(3)].map((_, i) => <TaskCardSkeleton key={i} />) :
             filtered.length ? filtered.map((t) => (
-              <TaskCard key={t.id} task={t} canEdit={isManager} canDelete={isManager} canChangeStatus={true}
-                onStatusChange={handleStatusChange} onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
-                onDelete={handleDelete} onViewDetail={(task) => setDetailTask(task)} />
+              <TaskCard key={t.id} task={t}
+                canEdit={canEditTask}
+                canDelete={canDeleteTask}
+                canChangeStatus={isManager || isSupervisor || (isEmployee && t.assigned_to === userName)}
+                onStatusChange={handleStatusChange}
+                onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
+                onDelete={handleDelete}
+                onViewDetail={(task) => setDetailTask(task)} />
             )) : (
               <div className="bg-white rounded-2xl border border-border p-16 text-center">
                 <p className="text-4xl mb-3">📭</p><p className="text-sm text-gray-400 font-medium">No tasks found</p></div>
             )}
         </div>
       </div>
-      <TaskModal open={taskModalOpen} task={editingTask} supervisors={supervisors} roleName="Manager"
+      <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
+        employees={modalEmployees} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
-      <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={isManager ? "Manager" : "Supervisor"} />
+      <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={(pin) => { const ok = login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>
   );
 }
