@@ -106,15 +106,16 @@ export default function ProductionPage() {
     if (depts && depts.length > 0) {
       const deptIds = depts.map((d: { id: number }) => d.id);
       const { data: tasks } = await supabase.from("machine_type_tasks")
-        .select("department_id, name, sort_order")
+        .select("department_id, name, priority, sort_order")
         .in("department_id", deptIds)
         .order("sort_order");
 
       const deptMap = Object.fromEntries(depts.map((d: { id: number; name: string }) => [d.id, d.name]));
-      const projectTasks = (tasks || []).map((t: { department_id: number; name: string; sort_order: number }) => ({
+      const projectTasks = (tasks || []).map((t: { department_id: number; name: string; priority: string; sort_order: number }) => ({
         project_id: project.id,
         department_name: deptMap[t.department_id],
         task_name: t.name,
+        priority: t.priority || "Medium",
         sort_order: t.sort_order,
       }));
 

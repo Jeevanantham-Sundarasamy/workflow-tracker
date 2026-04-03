@@ -229,7 +229,10 @@ export default function ProjectDetailPage() {
                         <div key={task.id} className="flex items-center gap-3 px-5 py-3 border-b border-border-light last:border-b-0 hover:bg-gray-50 transition flex-wrap sm:flex-nowrap">
                           {/* Task name */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 truncate">{task.task_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-semibold text-gray-900 truncate">{task.task_name}</p>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                            </div>
                             {task.assigned_to && <p className="text-[10px] text-gray-400 flex items-center gap-1"><User className="w-2.5 h-2.5" /> {task.assigned_to}</p>}
                           </div>
 

@@ -175,6 +175,7 @@ CREATE TABLE machine_type_tasks (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   department_id BIGINT NOT NULL REFERENCES machine_type_departments(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'Medium',
   sort_order INT NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -198,6 +199,7 @@ CREATE TABLE project_tasks (
   project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   department_name TEXT NOT NULL,
   task_name TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'Medium',
   sort_order INT NOT NULL DEFAULT 0,
   assigned_to TEXT,
   status TEXT NOT NULL DEFAULT 'Pending',

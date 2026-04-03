@@ -142,6 +142,7 @@ export interface MachineTypeTask {
   id: string;
   department_id: string;
   name: string;
+  priority: "High" | "Medium" | "Low";
   sort_order: number;
 }
 
@@ -162,6 +163,7 @@ export interface ProjectTask {
   project_id: string;
   department_name: string;
   task_name: string;
+  priority: "High" | "Medium" | "Low";
   sort_order: number;
   assigned_to: string | null;
   status: "Pending" | "In Progress" | "Done";

@@ -8,7 +8,7 @@ import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, ArrowLeft, X, GripVertical,
+  Plus, Trash2, ChevronDown, ChevronRight, ArrowLeft, X, GripVertical, Pencil, Check,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
@@ -23,7 +23,8 @@ interface MachineTypeWithDepts extends MachineType {
 
 export default function MachineTypesPage() {
   const { toast } = useToast();
-  const { hasFullAccess, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
+  const canEdit = hasFullAccess || isSupervisor;
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [machineTypes, setMachineTypes] = useState<MachineTypeWithDepts[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export default function MachineTypesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
-  const [formDepts, setFormDepts] = useState<{ name: string; tasks: string[] }[]>([
+  const [formDepts, setFormDepts] = useState<{ name: string; tasks: { name: string; priority: string }[] }[]>([
     { name: "Purchase", tasks: [] },
     { name: "Imports", tasks: [] },
     { name: "Fabrication", tasks: [] },
@@ -44,6 +45,7 @@ export default function MachineTypesPage() {
     { name: "Dispatch", tasks: [] },
     { name: "Installation & Commissioning", tasks: [] },
   ]);
+  const [formTaskPriority, setFormTaskPriority] = useState("Medium");
   const [newTaskInputs, setNewTaskInputs] = useState<Record<number, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -82,9 +84,10 @@ export default function MachineTypesPage() {
     const taskName = (newTaskInputs[deptIdx] || "").trim();
     if (!taskName) return;
     const updated = [...formDepts];
-    updated[deptIdx].tasks.push(taskName);
+    updated[deptIdx].tasks.push({ name: taskName, priority: formTaskPriority });
     setFormDepts(updated);
     setNewTaskInputs({ ...newTaskInputs, [deptIdx]: "" });
+    setFormTaskPriority("Medium");
   };
 
   const removeTask = (deptIdx: number, taskIdx: number) => {
@@ -119,7 +122,8 @@ export default function MachineTypesPage() {
       if (deptData && dept.tasks.length > 0) {
         const taskRows = dept.tasks.map((t, j) => ({
           department_id: deptData.id,
-          name: t,
+          name: t.name,
+          priority: t.priority,
           sort_order: j,
         }));
         await supabase.from("machine_type_tasks").insert(taskRows);
@@ -129,7 +133,7 @@ export default function MachineTypesPage() {
     toast("Machine type created!", "success");
     setModalOpen(false);
     setFormName(""); setFormDesc("");
-    setFormDepts([{ name: "", tasks: [] }]);
+    setFormDepts([{ name: "", tasks: [] }]); setFormTaskPriority("Medium");
     setNewTaskInputs({});
     setSubmitting(false);
     loadData();
@@ -139,6 +143,85 @@ export default function MachineTypesPage() {
     if (!confirm(`Delete "${name}" and all its departments/tasks?`)) return;
     const { error } = await supabase.from("machine_types").delete().eq("id", id);
     if (!error) { setMachineTypes((p) => p.filter((m) => m.id !== id)); toast("Deleted", "success"); }
+  };
+
+  // Inline editing state
+  const [editingDept, setEditingDept] = useState<string | null>(null);
+  const [editDeptName, setEditDeptName] = useState("");
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [editTaskName, setEditTaskName] = useState("");
+  const [addingTaskToDept, setAddingTaskToDept] = useState<string | null>(null);
+  const [inlineNewTask, setInlineNewTask] = useState("");
+  const [inlineNewTaskPriority, setInlineNewTaskPriority] = useState("Medium");
+  const [addingDeptToType, setAddingDeptToType] = useState<string | null>(null);
+  const [inlineNewDept, setInlineNewDept] = useState("");
+  const [editingMtName, setEditingMtName] = useState<string | null>(null);
+  const [editMtNameValue, setEditMtNameValue] = useState("");
+  const [editMtDescValue, setEditMtDescValue] = useState("");
+
+  // Edit machine type name/description
+  const updateMachineType = async (id: string) => {
+    const name = editMtNameValue.trim(); if (!name) return;
+    const { error } = await supabase.from("machine_types").update({ name, description: editMtDescValue.trim() || null }).eq("id", id);
+    if (!error) { setMachineTypes((p) => p.map((m) => m.id === id ? { ...m, name, description: editMtDescValue.trim() || null } : m)); setEditingMtName(null); toast("Updated", "success"); }
+  };
+
+  // Department CRUD
+  const addDeptToType = async (mtId: string) => {
+    const name = inlineNewDept.trim(); if (!name) return;
+    const sortOrder = machineTypes.find((m) => m.id === mtId)?.departments.length || 0;
+    const { data, error } = await supabase.from("machine_type_departments").insert({ machine_type_id: mtId, name, sort_order: sortOrder }).select().single();
+    if (!error && data) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: [...m.departments, { ...data, tasks: [] }] } : m));
+      setInlineNewDept(""); setAddingDeptToType(null); toast("Department added", "success");
+    } else toast("Failed — name may already exist", "error");
+  };
+
+  const updateDeptName = async (deptId: string, mtId: string) => {
+    const name = editDeptName.trim(); if (!name) return;
+    const { error } = await supabase.from("machine_type_departments").update({ name }).eq("id", deptId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.map((d) => d.id === deptId ? { ...d, name } : d) } : m));
+      setEditingDept(null); toast("Updated", "success");
+    }
+  };
+
+  const deleteDept = async (deptId: string, mtId: string, name: string) => {
+    if (!confirm(`Delete department "${name}" and all its tasks?`)) return;
+    const { error } = await supabase.from("machine_type_departments").delete().eq("id", deptId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.filter((d) => d.id !== deptId) } : m));
+      toast("Deleted", "success");
+    }
+  };
+
+  // Task CRUD
+  const addTaskToDept = async (deptId: string, mtId: string) => {
+    const name = inlineNewTask.trim(); if (!name) return;
+    const dept = machineTypes.find((m) => m.id === mtId)?.departments.find((d) => d.id === deptId);
+    const sortOrder = dept?.tasks.length || 0;
+    const { data, error } = await supabase.from("machine_type_tasks").insert({ department_id: deptId, name, priority: inlineNewTaskPriority, sort_order: sortOrder }).select().single();
+    if (!error && data) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.map((d) => d.id === deptId ? { ...d, tasks: [...d.tasks, data] } : d) } : m));
+      setInlineNewTask(""); setInlineNewTaskPriority("Medium"); toast("Task added", "success");
+    }
+  };
+
+  const updateTaskName = async (taskId: string, deptId: string, mtId: string) => {
+    const name = editTaskName.trim(); if (!name) return;
+    const { error } = await supabase.from("machine_type_tasks").update({ name }).eq("id", taskId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.map((d) => d.id === deptId ? { ...d, tasks: d.tasks.map((t) => t.id === taskId ? { ...t, name } : t) } : d) } : m));
+      setEditingTask(null); toast("Updated", "success");
+    }
+  };
+
+  const deleteTask = async (taskId: string, deptId: string, mtId: string) => {
+    const { error } = await supabase.from("machine_type_tasks").delete().eq("id", taskId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.map((d) => d.id === deptId ? { ...d, tasks: d.tasks.filter((t) => t.id !== taskId) } : d) } : m));
+      toast("Deleted", "success");
+    }
   };
 
   return (
@@ -157,7 +240,7 @@ export default function MachineTypesPage() {
               <p className="text-sm text-gray-400">{machineTypes.length} type{machineTypes.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
-          {hasFullAccess && (
+          {canEdit && (
             <button onClick={() => setModalOpen(true)}
               className="flex items-center gap-1.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
               <Plus className="w-4 h-4" /> New Type
@@ -177,17 +260,38 @@ export default function MachineTypesPage() {
                 <div key={mt.id} className="bg-white rounded-2xl border border-border overflow-hidden">
                   <button onClick={() => setExpanded(isOpen ? null : mt.id)}
                     className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900">{mt.name}</h3>
-                      <p className="text-xs text-gray-400">{mt.departments.length} departments · {totalTasks} tasks</p>
-                      {mt.description && <p className="text-xs text-gray-400 italic mt-1">{mt.description}</p>}
+                    <div className="flex-1 min-w-0">
+                      {editingMtName === mt.id ? (
+                        <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <input type="text" value={editMtNameValue} onChange={(e) => setEditMtNameValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && updateMachineType(mt.id)}
+                            placeholder="Name" autoFocus className="px-2 py-1 rounded-lg border border-border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-40" />
+                          <input type="text" value={editMtDescValue} onChange={(e) => setEditMtDescValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && updateMachineType(mt.id)}
+                            placeholder="Description" className="px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-48" />
+                          <button onClick={(e) => { e.stopPropagation(); updateMachineType(mt.id); }} className="text-emerald-600"><Check className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingMtName(null); }} className="text-gray-400"><X className="w-4 h-4" /></button>
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="text-sm font-bold text-gray-900">{mt.name}</h3>
+                          <p className="text-xs text-gray-400">{mt.departments.length} departments · {totalTasks} tasks</p>
+                          {mt.description && <p className="text-xs text-gray-400 italic mt-1">{mt.description}</p>}
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {hasFullAccess && (
-                        <button onClick={(e) => { e.stopPropagation(); deleteMachineType(mt.id, mt.name); }}
-                          className="text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      {canEdit && editingMtName !== mt.id && (
+                        <>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingMtName(mt.id); setEditMtNameValue(mt.name); setEditMtDescValue(mt.description || ""); }}
+                            className="text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteMachineType(mt.id, mt.name); }}
+                            className="text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </>
                       )}
                       {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                     </div>
@@ -198,20 +302,101 @@ export default function MachineTypesPage() {
                         <div key={dept.id} className="bg-white rounded-xl border border-border p-4">
                           <div className="flex items-center gap-2 mb-2">
                             <GripVertical className="w-3.5 h-3.5 text-gray-300" />
-                            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">{dept.name}</h4>
-                            <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{dept.tasks.length} tasks</span>
+                            {editingDept === dept.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input type="text" value={editDeptName} onChange={(e) => setEditDeptName(e.target.value)}
+                                  onKeyDown={(e) => e.key === "Enter" && updateDeptName(dept.id, mt.id)} autoFocus
+                                  className="px-2 py-0.5 rounded-lg border border-border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-36" />
+                                <button onClick={() => updateDeptName(dept.id, mt.id)} className="text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => setEditingDept(null)} className="text-gray-400"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            ) : (
+                              <>
+                                <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">{dept.name}</h4>
+                                <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{dept.tasks.length} tasks</span>
+                                {canEdit && (
+                                  <div className="flex items-center gap-1 ml-auto">
+                                    <button onClick={() => { setEditingDept(dept.id); setEditDeptName(dept.name); }}
+                                      className="text-gray-400 hover:text-primary-600"><Pencil className="w-3 h-3" /></button>
+                                    <button onClick={() => deleteDept(dept.id, mt.id, dept.name)}
+                                      className="text-gray-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
-                          {dept.tasks.length > 0 ? (
-                            <div className="space-y-1 ml-5">
-                              {dept.tasks.map((task, i) => (
-                                <p key={task.id} className="text-xs text-gray-600">{i + 1}. {task.name}</p>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-gray-400 italic ml-5">No tasks defined</p>
-                          )}
+                          {/* Tasks list */}
+                          <div className="space-y-1 ml-5">
+                            {dept.tasks.map((task, i) => (
+                              <div key={task.id} className="flex items-center gap-2 group">
+                                {editingTask === task.id ? (
+                                  <div className="flex items-center gap-1.5 flex-1">
+                                    <span className="text-gray-400 text-xs">{i + 1}.</span>
+                                    <input type="text" value={editTaskName} onChange={(e) => setEditTaskName(e.target.value)}
+                                      onKeyDown={(e) => e.key === "Enter" && updateTaskName(task.id, dept.id, mt.id)} autoFocus
+                                      className="flex-1 px-2 py-0.5 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                                    <button onClick={() => updateTaskName(task.id, dept.id, mt.id)} className="text-emerald-600"><Check className="w-3 h-3" /></button>
+                                    <button onClick={() => setEditingTask(null)} className="text-gray-400"><X className="w-3 h-3" /></button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="text-xs text-gray-600 flex-1">{i + 1}. {task.name}
+                                      <span className={`ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                                    </p>
+                                    {canEdit && (
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                                        <button onClick={() => { setEditingTask(task.id); setEditTaskName(task.name); }}
+                                          className="text-gray-400 hover:text-primary-600"><Pencil className="w-2.5 h-2.5" /></button>
+                                        <button onClick={() => deleteTask(task.id, dept.id, mt.id)}
+                                          className="text-gray-400 hover:text-red-500"><Trash2 className="w-2.5 h-2.5" /></button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                            {dept.tasks.length === 0 && <p className="text-xs text-gray-400 italic">No tasks defined</p>}
+                            {/* Add task inline */}
+                            {canEdit && (
+                              addingTaskToDept === dept.id ? (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <input type="text" value={inlineNewTask} onChange={(e) => setInlineNewTask(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && addTaskToDept(dept.id, mt.id)} autoFocus
+                                    placeholder="Task name" className="flex-1 px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                                  <select value={inlineNewTaskPriority} onChange={(e) => setInlineNewTaskPriority(e.target.value)}
+                                    className="px-1.5 py-1 rounded-lg border border-border text-[10px] font-bold focus:outline-none">
+                                    <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                                  </select>
+                                  <button onClick={() => addTaskToDept(dept.id, mt.id)} className="text-[10px] font-bold text-primary-600">Add</button>
+                                  <button onClick={() => { setAddingTaskToDept(null); setInlineNewTask(""); setInlineNewTaskPriority("Medium"); }} className="text-gray-400"><X className="w-3 h-3" /></button>
+                                </div>
+                              ) : (
+                                <button onClick={() => { setAddingTaskToDept(dept.id); setInlineNewTask(""); }}
+                                  className="text-[10px] font-bold text-primary-600 hover:text-primary-700 mt-1 flex items-center gap-0.5">
+                                  <Plus className="w-3 h-3" /> Add Task
+                                </button>
+                              )
+                            )}
+                          </div>
                         </div>
                       ))}
+                      {/* Add department inline */}
+                      {canEdit && (
+                        addingDeptToType === mt.id ? (
+                          <div className="flex items-center gap-2">
+                            <input type="text" value={inlineNewDept} onChange={(e) => setInlineNewDept(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && addDeptToType(mt.id)} autoFocus
+                              placeholder="Department name" className="flex-1 px-3 py-2 rounded-xl border border-border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                            <button onClick={() => addDeptToType(mt.id)} className="text-xs font-bold text-primary-600">Add</button>
+                            <button onClick={() => { setAddingDeptToType(null); setInlineNewDept(""); }} className="text-gray-400"><X className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setAddingDeptToType(mt.id); setInlineNewDept(""); }}
+                            className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                            <Plus className="w-3.5 h-3.5" /> Add Department
+                          </button>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -265,7 +450,8 @@ export default function MachineTypesPage() {
                         {dept.tasks.map((task, tIdx) => (
                           <div key={tIdx} className="flex items-center gap-2 text-xs text-gray-600">
                             <span className="text-gray-400">{tIdx + 1}.</span>
-                            <span className="flex-1">{task}</span>
+                            <span className="flex-1">{task.name}</span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
                             <button onClick={() => removeTask(dIdx, tIdx)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
                           </div>
                         ))}
@@ -273,6 +459,10 @@ export default function MachineTypesPage() {
                           <input type="text" value={newTaskInputs[dIdx] || ""} onChange={(e) => setNewTaskInputs({ ...newTaskInputs, [dIdx]: e.target.value })}
                             onKeyDown={(e) => e.key === "Enter" && addTask(dIdx)}
                             placeholder="Add task..." className="flex-1 px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                          <select value={formTaskPriority} onChange={(e) => setFormTaskPriority(e.target.value)}
+                            className="px-1.5 py-1 rounded-lg border border-border text-[10px] font-bold focus:outline-none">
+                            <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                          </select>
                           <button onClick={() => addTask(dIdx)} className="text-[10px] font-bold text-primary-600 hover:text-primary-700">Add</button>
                         </div>
                       </div>
