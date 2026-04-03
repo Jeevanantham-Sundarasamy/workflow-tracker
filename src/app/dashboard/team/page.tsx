@@ -373,8 +373,10 @@ export default function TeamPage() {
                                   onKeyDown={(e) => { if (e.key === "Enter") updateManager(mgr.name); if (e.key === "Escape") setEditingItem(null); }}
                                   placeholder="Phone" className="px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-36" />
                                 <div className="flex items-center gap-1.5">
-                                  <button onClick={() => updateManager(mgr.name)} className="text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
-                                  <button onClick={() => setEditingItem(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                                  <button onClick={() => updateManager(mgr.name)}
+                                    className="text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-1.5 rounded-lg transition">Save</button>
+                                  <button onClick={() => setEditingItem(null)}
+                                    className="text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-4 py-1.5 rounded-lg transition">Cancel</button>
                                 </div>
                               </div>
                             ) : (
@@ -485,9 +487,15 @@ export default function TeamPage() {
                                     ))}
                                   </div>
                                 )}
-                                <div className="flex items-center gap-1.5">
-                                  <button onClick={() => updateSupervisor(sup.name)} className="text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
-                                  <button onClick={() => setEditingItem(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <button onClick={() => updateSupervisor(sup.name)}
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-1.5 rounded-lg transition">
+                                    Save
+                                  </button>
+                                  <button onClick={() => setEditingItem(null)}
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-4 py-1.5 rounded-lg transition">
+                                    Cancel
+                                  </button>
                                 </div>
                               </div>
                             ) : (

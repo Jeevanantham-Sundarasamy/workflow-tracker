@@ -100,10 +100,11 @@ export default function LoginPage() {
     try {
       const { data } = await supabase
         .from("managers")
-        .select("name")
+        .select("name, department")
         .eq("pin", pinStr);
       if (data && data.length > 0) {
-        localStorage.setItem(STORAGE_KEY, `manager:${data[0].name}`);
+        const mgr = data[0];
+        localStorage.setItem(STORAGE_KEY, `manager:${mgr.name}|dept:${mgr.department || ""}`);
         router.replace("/dashboard");
         return;
       }
@@ -113,10 +114,11 @@ export default function LoginPage() {
     try {
       const { data } = await supabase
         .from("supervisors")
-        .select("name")
+        .select("name, department")
         .eq("pin", pinStr);
       if (data && data.length > 0) {
-        localStorage.setItem(STORAGE_KEY, `supervisor:${data[0].name}`);
+        const sup = data[0];
+        localStorage.setItem(STORAGE_KEY, `supervisor:${sup.name}|dept:${sup.department || ""}`);
         router.replace("/dashboard/tasks");
         return;
       }
@@ -126,11 +128,11 @@ export default function LoginPage() {
     try {
       const { data } = await supabase
         .from("employees")
-        .select("name, supervisor_name")
+        .select("name, supervisor_name, department")
         .eq("pin", pinStr);
       if (data && data.length > 0) {
         const emp = data[0];
-        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${emp.supervisor_name || ""}`);
+        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${emp.supervisor_name || ""}|dept:${emp.department || ""}`);
         router.replace("/dashboard/tasks");
         return;
       }
