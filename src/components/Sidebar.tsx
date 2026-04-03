@@ -23,6 +23,7 @@ const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; 
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
   { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
   { label: "Team", href: "/dashboard/team", icon: Users, access: "full_access" },
+  { label: "Production", href: "/dashboard/production", icon: Workflow, access: "not_employee" },
   { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },

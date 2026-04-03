@@ -121,3 +121,57 @@ export const ROLE_LABELS: Record<Role, string> = {
 export function hasPermission(permissions: string[], action: string): boolean {
   return permissions.includes("all") || permissions.includes(action);
 }
+
+// Production types
+export interface MachineType {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface MachineTypeDepartment {
+  id: string;
+  machine_type_id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface MachineTypeTask {
+  id: string;
+  department_id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface Project {
+  id: string;
+  machine_type_id: string;
+  serial_number: string;
+  customer_name: string;
+  start_date: string;
+  due_date: string;
+  status: "Active" | "Completed" | "On Hold";
+  created_by: string;
+  created_at: string;
+}
+
+export interface ProjectTask {
+  id: string;
+  project_id: string;
+  department_name: string;
+  task_name: string;
+  sort_order: number;
+  assigned_to: string | null;
+  status: "Pending" | "In Progress" | "Done";
+  qc_status: "Approved" | "Rejected" | null;
+  qc_by: string | null;
+  qc_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export const PROJECT_STATUSES = ["Active", "Completed", "On Hold"] as const;
+export const PROJECT_TASK_STATUSES = ["Pending", "In Progress", "Done"] as const;
+export const QC_STATUSES = ["Approved", "Rejected"] as const;

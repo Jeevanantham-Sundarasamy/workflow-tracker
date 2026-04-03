@@ -149,6 +149,65 @@ INSERT INTO user_roles (name, pin, permissions) VALUES
   ('manager', '5678', '["create_task","edit_task","view_all","manage_supervisors","export","import"]'::jsonb),
   ('supervisor', '0000', '["view_own","update_status","comment"]'::jsonb);
 
+-- ==================== PRODUCTION TABLES ====================
+
+-- 12. Machine Types (templates)
+CREATE TABLE machine_types (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_by TEXT NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 13. Departments within a machine type
+CREATE TABLE machine_type_departments (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  machine_type_id BIGINT NOT NULL REFERENCES machine_types(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(machine_type_id, name)
+);
+
+-- 14. Predefined tasks within each department
+CREATE TABLE machine_type_tasks (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  department_id BIGINT NOT NULL REFERENCES machine_type_departments(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 15. Projects (instances of a machine being built)
+CREATE TABLE projects (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  machine_type_id BIGINT NOT NULL REFERENCES machine_types(id),
+  serial_number TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Active',
+  created_by TEXT NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 16. Project tasks (created from template when project starts)
+CREATE TABLE project_tasks (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  department_name TEXT NOT NULL,
+  task_name TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  assigned_to TEXT,
+  status TEXT NOT NULL DEFAULT 'Pending',
+  qc_status TEXT,
+  qc_by TEXT,
+  qc_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Disable Row Level Security
 ALTER TABLE managers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
@@ -161,6 +220,11 @@ ALTER TABLE activity_log DISABLE ROW LEVEL SECURITY;
 ALTER TABLE attachments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE machine_types DISABLE ROW LEVEL SECURITY;
+ALTER TABLE machine_type_departments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE machine_type_tasks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE project_tasks DISABLE ROW LEVEL SECURITY;
 
 -- Enable Realtime for key tables
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE managers; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -171,3 +235,5 @@ DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE activity_log; EXCEPTIO
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE leave_requests; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE supervisors; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE employees; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE projects; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE project_tasks; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
