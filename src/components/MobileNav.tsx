@@ -11,25 +11,25 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
-type Access = "all" | "logged_in" | "manager_only" | "not_employee";
+type Access = "all" | "logged_in" | "admin_only" | "not_employee";
 
 const allItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
   { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
   { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "manager_only" },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "admin_only" },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
-  const { isManager, isSupervisor, isLoggedIn } = useAuth();
+  const { isAdmin, hasFullAccess, isSupervisor, isLoggedIn } = useAuth();
 
   const items = allItems.filter((item) => {
     if (item.access === "all") return true;
     if (item.access === "logged_in") return isLoggedIn;
-    if (item.access === "manager_only") return isManager;
-    if (item.access === "not_employee") return isManager || isSupervisor;
+    if (item.access === "admin_only") return isAdmin;
+    if (item.access === "not_employee") return hasFullAccess || isSupervisor;
     return false;
   });
 

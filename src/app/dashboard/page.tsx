@@ -21,7 +21,7 @@ import LoginRequired from "@/components/LoginRequired";
 
 export default function DashboardPage() {
   const { toast } = useToast();
-  const { isManager, isSupervisor, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
@@ -72,7 +72,7 @@ export default function DashboardPage() {
 
   // Role-based filtering
   const roleFiltered = tasks.filter((t) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName;
     return true;
   });
@@ -81,10 +81,10 @@ export default function DashboardPage() {
     (t) => (filterStatus === "All" || t.status === filterStatus) && (filterSup === "All" || t.supervisor === filterSup)
   );
 
-  const canCreateTask = isManager || isSupervisor;
-  const canEditTask = isManager || isSupervisor;
-  const canDeleteTask = isManager;
-  const roleName = userName || "Manager";
+  const canCreateTask = hasFullAccess || isSupervisor;
+  const canEditTask = hasFullAccess || isSupervisor;
+  const canDeleteTask = hasFullAccess;
+  const roleName = userName || "Admin";
 
   const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
@@ -146,8 +146,8 @@ export default function DashboardPage() {
     e.target.value = "";
   };
 
-  const modalSupervisors = isSupervisor && !isManager ? [userName!] : supervisors;
-  const modalEmployees = isSupervisor && !isManager
+  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : supervisors;
+  const modalEmployees = isSupervisor && !hasFullAccess
     ? employees.filter((e) => e.supervisor_name === userName)
     : employees;
 
@@ -164,10 +164,10 @@ export default function DashboardPage() {
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <h2 className="text-base font-bold text-gray-900 mr-auto">
-                    {isSupervisor && !isManager ? "Team Tasks" : "Tasks"}
+                    {isSupervisor && !hasFullAccess ? "Team Tasks" : "Tasks"}
                     <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span>
                   </h2>
-                  {isManager && (
+                  {hasFullAccess && (
                     <div className="flex items-center gap-1.5">
                       <Filter className="w-3.5 h-3.5 text-gray-400" />
                       <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                       </select>
                     </div>
                   )}
-                  {isManager && (
+                  {hasFullAccess && (
                     <>
                       <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
                         <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export</span></button>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-4"><StatusChart tasks={roleFiltered} /></div>
             </div>
-            {isManager && <SupervisorGrid supervisors={supervisors} tasks={tasks} />}
+            {hasFullAccess && <SupervisorGrid supervisors={supervisors} tasks={tasks} />}
           </>
         )}
       </div>

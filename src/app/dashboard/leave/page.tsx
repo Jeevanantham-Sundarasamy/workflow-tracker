@@ -21,7 +21,7 @@ const statusStyle = {
 
 export default function LeavePage() {
   const { toast } = useToast();
-  const { isManager, isSupervisor, isEmployee, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, isEmployee, userName, login } = useAuth();
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [teamEmployees, setTeamEmployees] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -29,6 +29,9 @@ export default function LeavePage() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [submitting, setSubmitting] = useState(false);
   const [tableError, setTableError] = useState(false);
+
+  const [actionModal, setActionModal] = useState<{ id: string; status: "Approved" | "Rejected" } | null>(null);
+  const [actionComment, setActionComment] = useState("");
 
   const [form, setForm] = useState({
     employee_name: "",
@@ -76,7 +79,7 @@ export default function LeavePage() {
 
   // Role-based filtering
   const roleFiltered = leaves.filter((l) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     if (isSupervisor) {
       // Supervisor sees their own leave + their team's leave
       return l.employee_name === userName || teamEmployees.includes(l.employee_name);
@@ -120,14 +123,14 @@ export default function LeavePage() {
 
   // Can this user approve/reject a leave?
   const canApprove = (leave: LeaveRequest) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     if (isSupervisor && leave.employee_name !== userName && teamEmployees.includes(leave.employee_name)) return true;
     return false;
   };
 
   // Can this user delete a leave?
   const canDelete = (leave: LeaveRequest) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     return false;
   };
 
@@ -186,18 +189,27 @@ export default function LeavePage() {
     setModalOpen(false);
   };
 
-  const handleAction = async (id: string, status: "Approved" | "Rejected") => {
+  const openActionModal = (id: string, status: "Approved" | "Rejected") => {
+    setActionComment("");
+    setActionModal({ id, status });
+  };
+
+  const handleAction = async () => {
+    if (!actionModal) return;
+    const { id, status } = actionModal;
     const approver = userName || "Manager";
+    const comment = actionComment.trim() || null;
     const { error } = await supabase
       .from("leave_requests")
-      .update({ status, approved_by: approver })
+      .update({ status, approved_by: approver, approval_comment: comment })
       .eq("id", id);
     if (!error) {
-      setLeaves((p) => p.map((l) => (l.id === id ? { ...l, status, approved_by: approver } : l)));
+      setLeaves((p) => p.map((l) => (l.id === id ? { ...l, status, approved_by: approver, approval_comment: comment } : l)));
       toast(`Leave ${status.toLowerCase()}`, status === "Approved" ? "success" : "warning");
     } else {
       toast("Action failed", "error");
     }
+    setActionModal(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -358,16 +370,25 @@ export default function LeavePage() {
                   </div>
                 )}
 
+                {l.approval_comment && (
+                  <div className={`text-xs italic rounded-xl px-3 py-2 mb-3 border flex items-start gap-2 ${
+                    l.status === "Approved" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-500 border-red-200"
+                  }`}>
+                    <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span><span className="font-semibold">Comment:</span> {l.approval_comment}</span>
+                  </div>
+                )}
+
                 {/* Approve/Reject + Delete */}
                 {(showApproval || showDelete) && (
                   <div className="flex gap-2 pt-1 flex-wrap">
                     {showApproval && l.status === "Pending" && (
                       <>
-                        <button onClick={() => handleAction(l.id, "Approved")}
+                        <button onClick={() => openActionModal(l.id, "Approved")}
                           className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition">
                           <CheckCircle2 className="w-3 h-3" /> Approve
                         </button>
-                        <button onClick={() => handleAction(l.id, "Rejected")}
+                        <button onClick={() => openActionModal(l.id, "Rejected")}
                           className="flex items-center gap-1 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
                           <XCircle className="w-3 h-3" /> Reject
                         </button>
@@ -456,6 +477,47 @@ export default function LeavePage() {
                 <button onClick={handleApply} disabled={submitting}
                   className="flex-1 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition disabled:opacity-50">
                   {submitting ? "Submitting..." : "Submit Leave"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve/Reject Comment Modal */}
+      {actionModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setActionModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-6 pb-0">
+              <h2 className="text-base font-bold text-gray-900">
+                {actionModal.status === "Approved" ? "Approve" : "Reject"} Leave
+              </h2>
+              <button onClick={() => setActionModal(null)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                  Comment <span className="text-gray-300">(optional)</span>
+                </label>
+                <textarea value={actionComment} onChange={(e) => setActionComment(e.target.value)}
+                  placeholder={actionModal.status === "Approved" ? "e.g. Approved, enjoy your leave!" : "e.g. Reason for rejection..."}
+                  rows={3}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 resize-none" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setActionModal(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-gray-500 hover:bg-gray-50 transition">
+                  Cancel
+                </button>
+                <button onClick={handleAction}
+                  className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition ${
+                    actionModal.status === "Approved" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-500 hover:bg-red-600"
+                  }`}>
+                  {actionModal.status === "Approved" ? "Approve" : "Reject"}
                 </button>
               </div>
             </div>

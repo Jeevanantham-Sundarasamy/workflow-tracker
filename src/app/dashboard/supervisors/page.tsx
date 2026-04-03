@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import { Plus, Trash2, Users, Key, Eye, EyeOff, Pencil, Check, X, Search } from "lucide-react";
 import { checkPinUsed } from "@/lib/pinUtils";
-import ManagerOnly from "@/components/ManagerOnly";
+import AdminOnly from "@/components/AdminOnly";
 const dotColor: Record<string, string> = { Pending: "bg-amber-400", "In Progress": "bg-blue-400", Done: "bg-emerald-400", Delayed: "bg-red-400", "On Hold": "bg-orange-400", Cancelled: "bg-gray-400" };
 
 interface SupervisorData {
@@ -21,7 +21,7 @@ interface SupervisorData {
 
 export default function SupervisorsPage() {
   const { toast } = useToast();
-  const { isManager, login } = useAuth();
+  const { hasFullAccess, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<SupervisorData[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -117,7 +117,7 @@ export default function SupervisorsPage() {
   });
 
   return (
-    <ManagerOnly>
+    <AdminOnly>
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
@@ -135,7 +135,7 @@ export default function SupervisorsPage() {
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
         </div>
 
-        {isManager && (
+        {hasFullAccess && (
           <div className="bg-white rounded-2xl border border-border p-5">
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-3">Add New Supervisor</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -197,7 +197,7 @@ export default function SupervisorsPage() {
                         <p className="text-xs text-gray-400">{supTasks.length} task{supTasks.length !== 1 ? "s" : ""}</p>
                       </div>
                     </div>
-                    {isManager && editingName !== sup.name && (
+                    {hasFullAccess && editingName !== sup.name && (
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => { setEditingName(sup.name); setEditNameValue(sup.name); setEditDeptValue(sup.department || ""); }}
                           className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
@@ -212,7 +212,7 @@ export default function SupervisorsPage() {
                   </div>
 
                   {/* PIN section */}
-                  {isManager && (
+                  {hasFullAccess && (
                     <div className="mb-3 p-2.5 rounded-xl bg-gray-50 border border-border-light">
                       {editingPin === sup.name ? (
                         <div className="flex items-center gap-2">
@@ -279,6 +279,6 @@ export default function SupervisorsPage() {
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
         onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
     </div>
-    </ManagerOnly>
+    </AdminOnly>
   );
 }

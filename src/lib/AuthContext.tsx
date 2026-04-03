@@ -9,12 +9,15 @@ const STORAGE_KEY = "workflow_auth";
 
 interface AuthContextType {
   role: Role;
+  isAdmin: boolean;
   isManager: boolean;
   isSupervisor: boolean;
   isEmployee: boolean;
   isLoggedIn: boolean;
+  /** Admin or Manager — has full access */
+  hasFullAccess: boolean;
   userName: string | null;
-  supervisorName: string | null; // For employees: their supervisor. For supervisors: their own name.
+  supervisorName: string | null;
   department: string | null;
   login: (pin: string) => Promise<boolean>;
   logout: () => void;
@@ -23,10 +26,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   role: "guest",
+  isAdmin: false,
   isManager: false,
   isSupervisor: false,
   isEmployee: false,
   isLoggedIn: false,
+  hasFullAccess: false,
   userName: null,
   supervisorName: null,
   department: null,
@@ -67,9 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "manager") {
+    if (saved === "admin") {
+      setRole("admin");
+      setUserName("Admin");
+    } else if (saved?.startsWith("manager:")) {
+      const parts = saved.replace("manager:", "").split("|dept:");
       setRole("manager");
-      setUserName("Manager");
+      setUserName(parts[0]);
+      setDepartment(parts[1] || null);
     } else if (saved?.startsWith("supervisor:")) {
       const parts = saved.replace("supervisor:", "").split("|dept:");
       setRole("supervisor");
@@ -88,15 +98,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (pin: string): Promise<boolean> => {
-    // Check manager PIN first
+    // Check admin PIN first
     const currentPin = dbPin || FALLBACK_PIN;
     if (pin === currentPin) {
-      setRole("manager");
-      setUserName("Manager");
+      setRole("admin");
+      setUserName("Admin");
       setSupervisorName(null);
       setDepartment(null);
-      localStorage.setItem(STORAGE_KEY, "manager");
+      localStorage.setItem(STORAGE_KEY, "admin");
       return true;
+    }
+
+    // Check manager PINs
+    try {
+      const { data: mgrData, error: mgrError } = await supabase
+        .from("managers")
+        .select("name, department")
+        .eq("pin", pin);
+      if (!mgrError && mgrData && mgrData.length > 0) {
+        const mgr = mgrData[0];
+        setRole("manager");
+        setUserName(mgr.name);
+        setSupervisorName(null);
+        setDepartment(mgr.department || null);
+        localStorage.setItem(STORAGE_KEY, `manager:${mgr.name}|dept:${mgr.department || ""}`);
+        return true;
+      }
+    } catch {
+      // No managers table yet
     }
 
     // Check supervisor PINs
@@ -150,13 +179,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!loaded) return null;
 
+  const isAdmin = role === "admin";
   const isManager = role === "manager";
   const isSupervisor = role === "supervisor";
   const isEmployee = role === "employee";
   const isLoggedIn = role !== "guest";
+  const hasFullAccess = isAdmin || isManager;
 
   return (
-    <AuthContext.Provider value={{ role, isManager, isSupervisor, isEmployee, isLoggedIn, userName, supervisorName, department, login, logout, refreshPin: loadPin }}>
+    <AuthContext.Provider value={{ role, isAdmin, isManager, isSupervisor, isEmployee, isLoggedIn, hasFullAccess, userName, supervisorName, department, login, logout, refreshPin: loadPin }}>
       {children}
     </AuthContext.Provider>
   );

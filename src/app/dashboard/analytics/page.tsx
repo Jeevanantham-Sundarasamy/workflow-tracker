@@ -17,7 +17,7 @@ const COLORS: Record<string, string> = { Pending: "#f59e0b", "In Progress": "#3b
 
 export default function AnalyticsPage() {
   const { toast } = useToast();
-  const { isManager, isSupervisor, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -40,7 +40,7 @@ export default function AnalyticsPage() {
 
   // Role-based filtering
   const roleFiltered = tasks.filter((t) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName;
     return true;
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, LogIn, LogOut, Briefcase, User, UserCircle } from "lucide-react";
+import { Search, LogIn, LogOut, Briefcase, Shield, User, UserCircle } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -9,7 +9,7 @@ interface TopbarProps {
 }
 
 export default function Topbar({ onLoginClick }: TopbarProps) {
-  const { isManager, isSupervisor, isEmployee, isLoggedIn, userName, department, logout } = useAuth();
+  const { isAdmin, isManager, isSupervisor, isEmployee, isLoggedIn, userName, department, logout } = useAuth();
 
   return (
     <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
@@ -31,10 +31,19 @@ export default function Topbar({ onLoginClick }: TopbarProps) {
         <NotificationBell />
 
         {/* Role badge */}
-        {isManager && (
+        {isAdmin && (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-primary-50 border-primary-200">
-            <Briefcase className="w-3 h-3 text-primary-600" />
-            <span className="text-[10px] font-bold text-primary-700">Manager</span>
+            <Shield className="w-3 h-3 text-primary-600" />
+            <span className="text-[10px] font-bold text-primary-700">Admin</span>
+          </div>
+        )}
+        {isManager && userName && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border bg-violet-50 border-violet-200">
+            <Briefcase className="w-3 h-3 text-violet-600" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-violet-700 leading-tight">{userName}</span>
+              {department && <span className="text-[9px] text-violet-500 leading-tight">{department}</span>}
+            </div>
           </div>
         )}
         {isSupervisor && userName && (

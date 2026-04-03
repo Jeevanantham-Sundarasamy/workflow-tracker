@@ -24,7 +24,9 @@ export default function LoginPage() {
   // If already logged in, redirect
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "manager") {
+    if (saved === "admin") {
+      router.replace("/dashboard");
+    } else if (saved?.startsWith("manager:")) {
       router.replace("/dashboard");
     } else if (saved?.startsWith("supervisor:")) {
       router.replace("/dashboard/tasks");
@@ -77,22 +79,35 @@ export default function LoginPage() {
     setChecking(true);
     setError(false);
 
-    // Check manager PIN
-    let managerPin = FALLBACK_PIN;
+    // Check admin PIN
+    let adminPin = FALLBACK_PIN;
     try {
       const { data } = await supabase
         .from("settings")
         .select("value")
         .eq("key", "admin_pin")
         .single();
-      if (data?.value) managerPin = data.value;
+      if (data?.value) adminPin = data.value;
     } catch {}
 
-    if (pinStr === managerPin) {
-      localStorage.setItem(STORAGE_KEY, "manager");
+    if (pinStr === adminPin) {
+      localStorage.setItem(STORAGE_KEY, "admin");
       router.replace("/dashboard");
       return;
     }
+
+    // Check manager PIN
+    try {
+      const { data } = await supabase
+        .from("managers")
+        .select("name")
+        .eq("pin", pinStr);
+      if (data && data.length > 0) {
+        localStorage.setItem(STORAGE_KEY, `manager:${data[0].name}`);
+        router.replace("/dashboard");
+        return;
+      }
+    } catch {}
 
     // Check supervisor PIN
     try {
@@ -196,7 +211,8 @@ export default function LoginPage() {
           <div className="mt-6 pt-6 border-t border-border">
             <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center mb-3">Login as</p>
             <div className="flex justify-center gap-2">
-              <span className="text-[10px] font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full border border-primary-100">Manager</span>
+              <span className="text-[10px] font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full border border-primary-100">Admin</span>
+              <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 px-3 py-1 rounded-full border border-violet-100">Manager</span>
               <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">Supervisor</span>
               <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Employee</span>
             </div>

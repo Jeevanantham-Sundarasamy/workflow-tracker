@@ -18,7 +18,7 @@ import { Plus, Filter, Search } from "lucide-react";
 
 export default function TasksPage() {
   const { toast } = useToast();
-  const { isManager, isSupervisor, isEmployee, userName, role, login } = useAuth();
+  const { hasFullAccess, isSupervisor, isEmployee, userName, role, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
@@ -63,7 +63,7 @@ export default function TasksPage() {
 
   // Role-based task filtering
   const roleFiltered = tasks.filter((t) => {
-    if (isManager) return true;
+    if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName;
     if (isEmployee) return t.assigned_to === userName;
     return true; // guest sees all
@@ -76,16 +76,16 @@ export default function TasksPage() {
     return true;
   });
 
-  const canCreateTask = isManager || isSupervisor;
-  const canEditTask = isManager || isSupervisor;
-  const canDeleteTask = isManager;
+  const canCreateTask = hasFullAccess || isSupervisor;
+  const canEditTask = hasFullAccess || isSupervisor;
+  const canDeleteTask = hasFullAccess;
 
   const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"] } : t)));
     await supabase.from("tasks").update({ status }).eq("id", id);
     toast("Status updated", "success");
-    const actor = userName || (isManager ? "Manager" : "Unknown");
+    const actor = userName || (hasFullAccess ? "Manager" : "Unknown");
     if (task) {
       const details = comment ? `${task.status} → ${status} | ${comment}` : `${task.status} → ${status}`;
       await logActivity(id, "status_changed", details, actor);
@@ -118,13 +118,13 @@ export default function TasksPage() {
   };
 
   // For supervisor: only show their supervisors list (just themselves)
-  const modalSupervisors = isSupervisor && !isManager ? [userName!] : supervisors;
+  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : supervisors;
   // For supervisor: only show their team employees
-  const modalEmployees = isSupervisor && !isManager
+  const modalEmployees = isSupervisor && !hasFullAccess
     ? employees.filter((e) => e.supervisor_name === userName)
     : employees;
 
-  const roleName = userName || (isManager ? "Manager" : role === "supervisor" ? "Supervisor" : "Employee");
+  const roleName = userName || (hasFullAccess ? "Admin" : role === "supervisor" ? "Supervisor" : "Employee");
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -166,7 +166,7 @@ export default function TasksPage() {
               <TaskCard key={t.id} task={t}
                 canEdit={canEditTask}
                 canDelete={canDeleteTask}
-                canChangeStatus={isManager || isSupervisor || (isEmployee && t.assigned_to === userName)}
+                canChangeStatus={hasFullAccess || isSupervisor || (isEmployee && t.assigned_to === userName)}
                 onStatusChange={handleStatusChange}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}

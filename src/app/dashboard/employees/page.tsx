@@ -13,7 +13,7 @@ import { checkPinUsed } from "@/lib/pinUtils";
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const { isManager, isSupervisor, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -58,7 +58,7 @@ export default function EmployeesPage() {
 
   // Filter: supervisors see only their team
   const filtered = employees.filter((e) => {
-    if (isSupervisor && !isManager) {
+    if (isSupervisor && !hasFullAccess) {
       if (e.supervisor_name !== userName) return false;
     }
     if (search) {
@@ -147,7 +147,7 @@ export default function EmployeesPage() {
     } else toast("Failed to update", "error");
   };
 
-  const canManage = isManager || isSupervisor;
+  const canManage = hasFullAccess || isSupervisor;
 
   return (
     <LoginRequired>
@@ -158,7 +158,7 @@ export default function EmployeesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Employees</h1>
-            <p className="text-sm text-gray-400">{filtered.length} employee{filtered.length !== 1 ? "s" : ""}{isSupervisor && !isManager ? " in your team" : ""}</p>
+            <p className="text-sm text-gray-400">{filtered.length} employee{filtered.length !== 1 ? "s" : ""}{isSupervisor && !hasFullAccess ? " in your team" : ""}</p>
           </div>
         </div>
 
@@ -181,7 +181,7 @@ export default function EmployeesPage() {
               <input type="text" value={newPin} onChange={(e) => setNewPin(e.target.value)}
                 placeholder="PIN (for login)" maxLength={6} inputMode="numeric"
                 className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-              {isManager && (
+              {hasFullAccess && (
                 <select value={newSupervisor} onChange={(e) => setNewSupervisor(e.target.value)}
                   className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
                   <option value="">Select Supervisor</option>
@@ -228,7 +228,7 @@ export default function EmployeesPage() {
                         <input type="text" value={editEmpDepartment} onChange={(e) => setEditEmpDepartment(e.target.value)}
                           placeholder="Department"
                           className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                        {isManager && (
+                        {hasFullAccess && (
                           <select value={editEmpSupervisor} onChange={(e) => setEditEmpSupervisor(e.target.value)}
                             className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
                             <option value="">No Supervisor</option>

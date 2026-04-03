@@ -13,35 +13,33 @@ import {
   ChevronLeft,
   ChevronRight,
   Workflow,
-  UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
-type Access = "all" | "logged_in" | "manager_only" | "manager_supervisor" | "not_employee";
+type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee";
 
 const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
   { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
-  { label: "Supervisors", href: "/dashboard/supervisors", icon: Users, access: "manager_only" },
-  { label: "Employees", href: "/dashboard/employees", icon: UserPlus, access: "manager_supervisor" },
+  { label: "Team", href: "/dashboard/team", icon: Users, access: "full_access" },
   { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "manager_only" },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "admin_only" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { isManager, isSupervisor, isLoggedIn } = useAuth();
+  const { isAdmin, hasFullAccess, isSupervisor, isLoggedIn } = useAuth();
 
   const navItems = allNavItems.filter((item) => {
     if (item.access === "all") return true;
     if (item.access === "logged_in") return isLoggedIn;
-    if (item.access === "manager_only") return isManager;
-    if (item.access === "manager_supervisor") return isManager || isSupervisor;
-    if (item.access === "not_employee") return isManager || isSupervisor;
+    if (item.access === "admin_only") return isAdmin;
+    if (item.access === "full_access") return hasFullAccess;
+    if (item.access === "not_employee") return hasFullAccess || isSupervisor;
     return false;
   });
 

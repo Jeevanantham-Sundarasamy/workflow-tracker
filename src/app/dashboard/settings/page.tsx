@@ -6,13 +6,13 @@ import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
-import { Lock, Download, Upload } from "lucide-react";
-import ManagerOnly from "@/components/ManagerOnly";
+import { Lock, Upload, FileSpreadsheet, FileJson } from "lucide-react";
+import AdminOnly from "@/components/AdminOnly";
 import { checkPinUsed } from "@/lib/pinUtils";
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { isManager, login, refreshPin } = useAuth();
+  const { isAdmin, login, refreshPin } = useAuth();
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
 
@@ -37,22 +37,97 @@ export default function SettingsPage() {
     if (!(await login(curPin))) { setPinMsg({ text: "Current PIN incorrect", error: true }); return; }
     if (newPin.length < 4) { setPinMsg({ text: "PIN must be at least 4 digits", error: true }); return; }
     if (newPin !== confirmPin) { setPinMsg({ text: "PINs do not match", error: true }); return; }
-    const usedBy = await checkPinUsed(newPin, "manager");
+    const usedBy = await checkPinUsed(newPin, "admin");
     if (usedBy) { setPinMsg({ text: `PIN already used by ${usedBy}`, error: true }); return; }
     const { error } = await supabase.from("settings").update({ value: newPin }).eq("key", "admin_pin");
     if (error) setPinMsg({ text: "Save failed", error: true });
     else { await refreshPin(); setCurPin(""); setNewPin(""); setConfirmPin(""); setPinMsg({ text: "PIN changed!", error: false }); }
   };
 
-  const handleExport = async () => {
-    const [tr, sr] = await Promise.all([supabase.from("tasks").select("*"), supabase.from("supervisors").select("*")]);
-    const blob = new Blob([JSON.stringify({ tasks: tr.data, supervisors: (sr.data || []).map((s: { name: string }) => s.name), exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+  const fetchAllData = async () => {
+    const [tasks, managers, supervisors, employees, leaves, settings, notifications, comments, activityLog, attachments, userRoles] = await Promise.all([
+      supabase.from("tasks").select("*"),
+      supabase.from("managers").select("*"),
+      supabase.from("supervisors").select("*"),
+      supabase.from("employees").select("*"),
+      supabase.from("leave_requests").select("*"),
+      supabase.from("settings").select("*"),
+      supabase.from("notifications").select("*"),
+      supabase.from("comments").select("*"),
+      supabase.from("activity_log").select("*"),
+      supabase.from("attachments").select("*"),
+      supabase.from("user_roles").select("*"),
+    ]);
+    return {
+      tasks: tasks.data || [],
+      managers: managers.data || [],
+      supervisors: supervisors.data || [],
+      employees: employees.data || [],
+      leave_requests: leaves.data || [],
+      settings: settings.data || [],
+      notifications: notifications.data || [],
+      comments: comments.data || [],
+      activity_log: activityLog.data || [],
+      attachments: attachments.data || [],
+      user_roles: userRoles.data || [],
+      exportedAt: new Date().toISOString(),
+    };
+  };
+
+  const handleExportJSON = async () => {
+    const data = await fetchAllData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `workflow-backup-${new Date().toISOString().split("T")[0]}.json`; a.click();
+    toast("Exported as JSON", "success");
+  };
+
+  const handleExportExcel = async () => {
+    const data = await fetchAllData();
+    const toCsv = (rows: Record<string, unknown>[]) => {
+      if (!rows.length) return "";
+      const headers = Object.keys(rows[0]);
+      const csvRows = [headers.join(",")];
+      for (const row of rows) {
+        csvRows.push(headers.map((h) => {
+          const val = row[h];
+          const str = val === null || val === undefined ? "" : String(val);
+          return `"${str.replace(/"/g, '""')}"`;
+        }).join(","));
+      }
+      return csvRows.join("\n");
+    };
+
+    const sheets: Record<string, Record<string, unknown>[]> = {
+      tasks: data.tasks,
+      managers: data.managers,
+      supervisors: data.supervisors,
+      employees: data.employees,
+      leave_requests: data.leave_requests,
+      settings: data.settings,
+      notifications: data.notifications,
+      comments: data.comments,
+      activity_log: data.activity_log,
+      attachments: data.attachments,
+      user_roles: data.user_roles,
+    };
+
+    // Build a multi-sheet CSV (sections separated by sheet name headers)
+    let csvContent = "";
+    for (const [name, rows] of Object.entries(sheets)) {
+      if (rows.length > 0) {
+        csvContent += `--- ${name.toUpperCase()} ---\n${toCsv(rows)}\n\n`;
+      }
+    }
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `workflow-backup-${new Date().toISOString().split("T")[0]}.csv`; a.click();
+    toast("Exported as Excel/CSV", "success");
   };
 
   return (
-    <ManagerOnly>
+    <AdminOnly>
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
 
@@ -62,11 +137,11 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-400">Manage your workspace</p>
         </div>
 
-        {isManager && (
+        {isAdmin && (
           <div className="bg-white rounded-2xl border border-border p-6">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center"><Lock className="w-4 h-4 text-amber-600" /></div>
-              <div><h3 className="text-sm font-bold text-gray-900">Change Manager PIN</h3><p className="text-xs text-gray-400">Update access PIN</p></div>
+              <div><h3 className="text-sm font-bold text-gray-900">Change Admin PIN</h3><p className="text-xs text-gray-400">Update access PIN</p></div>
             </div>
             <div className="space-y-3">
               <div><label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Current PIN</label>
@@ -88,10 +163,15 @@ export default function SettingsPage() {
 
         <div className="bg-white rounded-2xl border border-border p-6">
           <h3 className="text-sm font-bold text-gray-900 mb-4">Data Management</h3>
-          <div className="flex gap-3">
-            <button onClick={handleExport} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
-              <Download className="w-4 h-4" /> Export Data</button>
-            <label className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">
+          <div className="space-y-3">
+            <p className="text-xs text-gray-400">Export all data (tasks, supervisors, employees, leaves, settings, etc.)</p>
+            <div className="flex gap-3">
+              <button onClick={handleExportJSON} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+                <FileJson className="w-4 h-4" /> Export JSON</button>
+              <button onClick={handleExportExcel} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+                <FileSpreadsheet className="w-4 h-4" /> Export Excel</button>
+            </div>
+            <label className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer">
               <Upload className="w-4 h-4" /> Import Data
               <input type="file" accept=".json" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0]; if (!file) return;
@@ -109,6 +189,7 @@ export default function SettingsPage() {
           <h3 className="text-sm font-bold text-gray-900 mb-2">About</h3>
           <div className="space-y-2 text-xs text-gray-500">
             <p><span className="font-semibold text-gray-700">App:</span> WorkFlow Tracker v1.0</p>
+            <p><span className="font-semibold text-gray-700">Built by:</span> Pragadeesh V</p>
             <p><span className="font-semibold text-gray-700">Stack:</span> Next.js + Supabase + Tailwind CSS</p>
             <p><span className="font-semibold text-gray-700">Auto-sync:</span> Every 30 seconds</p>
           </div>
@@ -116,8 +197,8 @@ export default function SettingsPage() {
       </div>
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
-        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Manager!", "success"); } return ok; }} />
+        onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome, Admin!", "success"); } return ok; }} />
     </div>
-    </ManagerOnly>
+    </AdminOnly>
   );
 }

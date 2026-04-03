@@ -1,18 +1,28 @@
 import { supabase } from "./supabase";
 
 /**
- * Check if a PIN is already used by any manager, supervisor, or employee.
+ * Check if a PIN is already used by any admin, manager, supervisor, or employee.
  * Returns the name/role of the person using it, or null if available.
  */
-export async function checkPinUsed(pin: string, excludeType?: "supervisor" | "employee" | "manager", excludeName?: string): Promise<string | null> {
+export async function checkPinUsed(pin: string, excludeType?: "supervisor" | "employee" | "admin" | "manager", excludeName?: string): Promise<string | null> {
   if (!pin) return null;
 
-  // Check manager PIN
+  // Check admin PIN
   try {
     const { data } = await supabase.from("settings").select("value").eq("key", "admin_pin").single();
     if (data?.value === pin) {
-      if (excludeType === "manager") return null;
-      return "Manager";
+      if (excludeType === "admin") return null;
+      return "Admin";
+    }
+  } catch {}
+
+  // Check manager PINs
+  try {
+    const { data } = await supabase.from("managers").select("name").eq("pin", pin);
+    if (data && data.length > 0) {
+      const match = data[0];
+      if (excludeType === "manager" && excludeName === match.name) return null;
+      return `Manager: ${match.name}`;
     }
   } catch {}
 

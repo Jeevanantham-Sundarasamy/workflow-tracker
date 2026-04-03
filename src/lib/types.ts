@@ -20,6 +20,17 @@ export interface Supervisor {
   name: string;
   pin: string | null;
   department: string | null;
+  manager_name: string | null;
+  phone: string | null;
+}
+
+export interface Manager {
+  id: string;
+  name: string;
+  pin: string | null;
+  department: string | null;
+  phone: string | null;
+  created_at: string;
 }
 
 export interface Employee {
@@ -87,10 +98,11 @@ export interface LeaveRequest {
   reason: string;
   status: "Pending" | "Approved" | "Rejected";
   approved_by: string | null;
+  approval_comment: string | null;
   created_at: string;
 }
 
-export type Role = "guest" | "manager" | "supervisor" | "employee";
+export type Role = "guest" | "admin" | "manager" | "supervisor" | "employee";
 
 export const LEAVE_TYPES = ["Casual", "Sick", "Earned", "Compensatory", "Other"] as const;
 export const LEAVE_STATUSES = ["Pending", "Approved", "Rejected"] as const;
@@ -100,6 +112,7 @@ export const PRIORITIES = ["High", "Medium", "Low"] as const;
 
 export const ROLE_LABELS: Record<Role, string> = {
   guest: "Guest",
+  admin: "Admin",
   manager: "Manager",
   supervisor: "Supervisor",
   employee: "Employee",
