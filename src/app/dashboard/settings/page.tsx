@@ -175,11 +175,37 @@ export default function SettingsPage() {
               <Upload className="w-4 h-4" /> Import Data
               <input type="file" accept=".json" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0]; if (!file) return;
-                try { const d = JSON.parse(await file.text());
-                  if (!d.tasks) { alert("Invalid"); return; } if (!confirm(`Import ${d.tasks.length} tasks?`)) return;
-                  if (d.supervisors) { for (const n of d.supervisors) await supabase.from("supervisors").upsert({ name: n }, { onConflict: "name" }); }
-                  for (const t of d.tasks) { const { id, created_at, updated_at, ...rest } = t; await supabase.from("tasks").insert(rest); }
-                  alert("Imported! Refresh to see."); } catch { alert("Failed."); }
+                try {
+                  const d = JSON.parse(await file.text());
+                  const counts: string[] = [];
+                  if (d.managers?.length) counts.push(`${d.managers.length} managers`);
+                  if (d.supervisors?.length) counts.push(`${d.supervisors.length} supervisors`);
+                  if (d.employees?.length) counts.push(`${d.employees.length} employees`);
+                  if (d.tasks?.length) counts.push(`${d.tasks.length} tasks`);
+                  if (d.leave_requests?.length) counts.push(`${d.leave_requests.length} leave requests`);
+                  if (!counts.length) { alert("No data found in file"); return; }
+                  if (!confirm(`Import ${counts.join(", ")}?`)) return;
+
+                  const insertRows = async (table: string, rows: Record<string, unknown>[]) => {
+                    for (const row of rows) {
+                      const { id, created_at, updated_at, ...rest } = row;
+                      await supabase.from(table).insert(rest);
+                    }
+                  };
+
+                  // Import in order (respect foreign keys)
+                  if (d.managers?.length) await insertRows("managers", d.managers);
+                  if (d.supervisors?.length) await insertRows("supervisors", d.supervisors);
+                  if (d.employees?.length) await insertRows("employees", d.employees);
+                  if (d.tasks?.length) await insertRows("tasks", d.tasks);
+                  if (d.leave_requests?.length) await insertRows("leave_requests", d.leave_requests);
+                  if (d.notifications?.length) await insertRows("notifications", d.notifications);
+                  if (d.comments?.length) await insertRows("comments", d.comments);
+                  if (d.activity_log?.length) await insertRows("activity_log", d.activity_log);
+                  if (d.attachments?.length) await insertRows("attachments", d.attachments);
+
+                  alert("Imported successfully! Refresh to see.");
+                } catch (err) { alert("Import failed: " + (err instanceof Error ? err.message : "Unknown error")); }
                 e.target.value = "";
               }} /></label>
           </div>
