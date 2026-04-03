@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import {
   Plus, Search, Filter, Settings2, ChevronRight, Calendar, User,
-  Package, Clock, CheckCircle2, X, AlertTriangle,
+  Package, Clock, CheckCircle2, X, AlertTriangle, Pencil, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
@@ -23,7 +23,8 @@ const statusColors: Record<string, { bg: string; text: string; border: string }>
 
 export default function ProductionPage() {
   const { toast } = useToast();
-  const { hasFullAccess, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
+  const canEdit = hasFullAccess || isSupervisor;
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [projects, setProjects] = useState<(Project & { machine_type_name: string; progress: number; total: number; done: number })[]>([]);
   const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
@@ -131,6 +132,34 @@ export default function ProductionPage() {
     loadData();
   };
 
+  // Edit project
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ id: "", serial_number: "", customer_name: "", start_date: "", due_date: "", status: "Active" });
+
+  const openEdit = (p: Project & { machine_type_name: string }) => {
+    setEditForm({ id: p.id, serial_number: p.serial_number, customer_name: p.customer_name, start_date: p.start_date, due_date: p.due_date, status: p.status });
+    setEditModalOpen(true);
+  };
+
+  const handleEdit = async () => {
+    if (!editForm.serial_number.trim() || !editForm.customer_name.trim()) { toast("Fields required", "error"); return; }
+    const { error } = await supabase.from("projects").update({
+      serial_number: editForm.serial_number.trim(),
+      customer_name: editForm.customer_name.trim(),
+      start_date: editForm.start_date,
+      due_date: editForm.due_date,
+      status: editForm.status,
+    }).eq("id", editForm.id);
+    if (!error) { setEditModalOpen(false); loadData(); toast("Project updated", "success"); }
+    else toast("Update failed", "error");
+  };
+
+  const deleteProject = async (id: string, name: string) => {
+    if (!confirm(`Delete project "${name}" and all its tasks?`)) return;
+    const { error } = await supabase.from("projects").delete().eq("id", id);
+    if (!error) { setProjects((p) => p.filter((pr) => pr.id !== id)); toast("Deleted", "success"); }
+  };
+
   const today = new Date().toISOString().split("T")[0];
 
   return (
@@ -146,13 +175,13 @@ export default function ProductionPage() {
             <p className="text-sm text-gray-400">{stats.total} projects · {stats.active} active</p>
           </div>
           <div className="flex items-center gap-2">
-            {hasFullAccess && (
+            {canEdit && (
               <Link href="/dashboard/production/machine-types"
                 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-2 rounded-xl hover:bg-gray-50 transition">
                 <Settings2 className="w-3.5 h-3.5" /> Machine Types
               </Link>
             )}
-            {hasFullAccess && (
+            {canEdit && (
               <button onClick={() => setModalOpen(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
                 <Plus className="w-4 h-4" /> New Project
@@ -203,10 +232,10 @@ export default function ProductionPage() {
               const st = statusColors[p.status] || statusColors.Active;
               const isOverdue = p.status === "Active" && p.due_date < today;
               return (
-                <Link key={p.id} href={`/dashboard/production/projects/${p.id}`}
-                  className={`block bg-white rounded-2xl border p-5 hover:shadow-md transition ${isOverdue ? "border-l-4 border-l-red-400 border-t-border border-r-border border-b-border" : "border-border"}`}>
+                <div key={p.id}
+                  className={`bg-white rounded-2xl border p-5 hover:shadow-md transition ${isOverdue ? "border-l-4 border-l-red-400 border-t-border border-r-border border-b-border" : "border-border"}`}>
                   <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex-1 min-w-0">
+                    <Link href={`/dashboard/production/projects/${p.id}`} className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="text-sm font-bold text-gray-900">{p.serial_number}</h3>
                         <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{p.machine_type_name}</span>
@@ -217,10 +246,22 @@ export default function ProductionPage() {
                         <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {p.start_date} → {p.due_date}</span>
                         <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {p.done}/{p.total} tasks</span>
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {canEdit && (
+                        <>
+                          <button onClick={() => openEdit(p)}
+                            className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-lg transition">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => deleteProject(p.id, p.serial_number)}
+                            className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${st.bg} ${st.text} ${st.border}`}>{p.status}</span>
-                      <ChevronRight className="w-4 h-4 text-gray-300" />
+                      <Link href={`/dashboard/production/projects/${p.id}`}><ChevronRight className="w-4 h-4 text-gray-300" /></Link>
                     </div>
                   </div>
                   {/* Progress bar */}
@@ -231,7 +272,7 @@ export default function ProductionPage() {
                     </div>
                     <span className="text-xs font-bold text-gray-700 w-10 text-right">{p.progress}%</span>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -301,6 +342,54 @@ export default function ProductionPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setEditModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 pb-0">
+              <h2 className="text-base font-bold text-gray-900">Edit Project</h2>
+              <button onClick={() => setEditModalOpen(false)} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                <input type="text" value={editForm.serial_number} onChange={(e) => setEditForm({ ...editForm, serial_number: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer Name <span className="text-red-400">*</span></label>
+                <input type="text" value={editForm.customer_name} onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Start Date</label>
+                  <input type="date" value={editForm.start_date} onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Due Date</label>
+                  <input type="date" value={editForm.due_date} onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Status</label>
+                <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+                  {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setEditModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-gray-500 hover:bg-gray-50 transition">Cancel</button>
+                <button onClick={handleEdit} className="flex-1 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition">Save</button>
+              </div>
             </div>
           </div>
         </div>
