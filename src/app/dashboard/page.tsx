@@ -52,7 +52,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
     if (taskModalOpen || detailTask) return;
-    const i = setInterval(loadData, 30000);
+    const i = setInterval(loadData, 60000);
     return () => clearInterval(i);
   }, [loadData, taskModalOpen, detailTask]);
 

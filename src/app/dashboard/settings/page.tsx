@@ -191,7 +191,7 @@ export default function SettingsPage() {
             <p><span className="font-semibold text-gray-700">App:</span> WorkFlow Tracker v1.0</p>
             <p><span className="font-semibold text-gray-700">Built by:</span> Pragadeesh V</p>
             <p><span className="font-semibold text-gray-700">Stack:</span> Next.js + Supabase + Tailwind CSS</p>
-            <p><span className="font-semibold text-gray-700">Auto-sync:</span> Every 30 seconds</p>
+            <p><span className="font-semibold text-gray-700">Auto-sync:</span> Every 60 seconds + Realtime</p>
           </div>
         </div>
       </div>

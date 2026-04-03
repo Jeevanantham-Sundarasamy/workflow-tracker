@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X } from "lucide-react";
-import { useState } from "react";
+import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES } from "@/lib/types";
 
@@ -31,7 +31,7 @@ const priorityStyles = {
   Low: "text-gray-400",
 };
 
-export default function TaskCard({
+function TaskCard({
   task,
   canEdit,
   canDelete,
@@ -225,3 +225,5 @@ export default function TaskCard({
     </>
   );
 }
+
+export default memo(TaskCard);

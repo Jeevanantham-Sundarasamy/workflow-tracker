@@ -73,7 +73,7 @@ export default function LeavePage() {
 
   useEffect(() => {
     loadData();
-    const i = setInterval(loadData, 30000);
+    const i = setInterval(loadData, 60000);
     return () => clearInterval(i);
   }, [loadData]);
 

@@ -20,7 +20,7 @@ export interface Supervisor {
   name: string;
   pin: string | null;
   department: string | null;
-  manager_name: string | null;
+  manager_names: string[] | null;
   phone: string | null;
 }
 

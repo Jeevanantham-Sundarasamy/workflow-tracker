@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { Task } from "@/lib/types";
 import { STATUSES } from "@/lib/types";
@@ -17,10 +18,13 @@ const COLORS: Record<string, string> = {
   Cancelled: "#94a3b8",
 };
 
-export default function StatusChart({ tasks }: StatusChartProps) {
-  const data = STATUSES
-    .map((s) => ({ name: s, value: tasks.filter((t) => t.status === s).length }))
-    .filter((d) => d.value > 0);
+function StatusChart({ tasks }: StatusChartProps) {
+  const data = useMemo(() =>
+    STATUSES
+      .map((s) => ({ name: s, value: tasks.filter((t) => t.status === s).length }))
+      .filter((d) => d.value > 0),
+    [tasks]
+  );
 
   if (!data.length) {
     return (
@@ -60,3 +64,5 @@ export default function StatusChart({ tasks }: StatusChartProps) {
     </div>
   );
 }
+
+export default memo(StatusChart);

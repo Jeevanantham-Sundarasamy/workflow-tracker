@@ -32,7 +32,7 @@ CREATE TABLE supervisors (
   name TEXT NOT NULL UNIQUE,
   pin TEXT,
   department TEXT,
-  manager_name TEXT,
+  manager_names TEXT,
   phone TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );

@@ -15,7 +15,7 @@ import { checkPinUsed } from "@/lib/pinUtils";
 const dotColor: Record<string, string> = { Pending: "bg-amber-400", "In Progress": "bg-blue-400", Done: "bg-emerald-400", Delayed: "bg-red-400", "On Hold": "bg-orange-400", Cancelled: "bg-gray-400" };
 
 interface ManagerData { name: string; pin: string | null; department: string | null; phone: string | null; }
-interface SupervisorData { name: string; pin: string | null; department: string | null; manager_name: string | null; phone: string | null; }
+interface SupervisorData { name: string; pin: string | null; department: string | null; manager_names: string[]; phone: string | null; }
 
 type Tab = "managers" | "supervisors" | "employees";
 
@@ -39,7 +39,7 @@ export default function TeamPage() {
   const [newDesignation, setNewDesignation] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newSupervisor, setNewSupervisor] = useState("");
-  const [newManager, setNewManager] = useState("");
+  const [newManagers, setNewManagers] = useState<string[]>([]);
 
   // Edit PIN
   const [editingPin, setEditingPin] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export default function TeamPage() {
   const [editDesignationValue, setEditDesignationValue] = useState("");
   const [editPhoneValue, setEditPhoneValue] = useState("");
   const [editSupervisorValue, setEditSupervisorValue] = useState("");
-  const [editManagerValue, setEditManagerValue] = useState("");
+  const [editManagerValues, setEditManagerValues] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -65,7 +65,11 @@ export default function TeamPage() {
       ]);
       setTasks(tr.data || []);
       setManagers((mr.data || []).map((m: ManagerData) => ({ name: m.name, pin: m.pin || null, department: m.department || null, phone: m.phone || null })));
-      setSupervisors((sr.data || []).map((s: SupervisorData) => ({ name: s.name, pin: s.pin || null, department: s.department || null, manager_name: s.manager_name || null, phone: s.phone || null })));
+      setSupervisors((sr.data || []).map((s: { name: string; pin?: string; department?: string; manager_names?: string; phone?: string }) => ({
+        name: s.name, pin: s.pin || null, department: s.department || null,
+        manager_names: s.manager_names ? s.manager_names.split(",").map((n) => n.trim()).filter(Boolean) : [],
+        phone: s.phone || null,
+      })));
       setEmployees(er.data || []);
     } catch { /* offline */ }
   }, []);
@@ -73,7 +77,7 @@ export default function TeamPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const clearForm = () => {
-    setNewName(""); setNewPin(""); setNewDepartment(""); setNewDesignation(""); setNewPhone(""); setNewSupervisor(""); setNewManager("");
+    setNewName(""); setNewPin(""); setNewDepartment(""); setNewDesignation(""); setNewPhone(""); setNewSupervisor(""); setNewManagers([]);
   };
 
   // ==================== MANAGERS ====================
@@ -118,10 +122,10 @@ export default function TeamPage() {
     const pin = newPin.trim() || null;
     if (pin) { const usedBy = await checkPinUsed(pin); if (usedBy) { toast(`PIN already used by ${usedBy}`, "error"); return; } }
     const department = newDepartment.trim() || null;
-    const manager_name = newManager || null;
+    const manager_names_str = newManagers.length > 0 ? newManagers.join(",") : null;
     const phone = newPhone.trim() || null;
-    const { error } = await supabase.from("supervisors").insert({ name, pin, department, manager_name, phone });
-    if (!error) { setSupervisors((p) => [...p, { name, pin, department, manager_name, phone }].sort((a, b) => a.name.localeCompare(b.name))); clearForm(); toast("Supervisor added", "success"); }
+    const { error } = await supabase.from("supervisors").insert({ name, pin, department, manager_names: manager_names_str, phone });
+    if (!error) { setSupervisors((p) => [...p, { name, pin, department, manager_names: newManagers, phone }].sort((a, b) => a.name.localeCompare(b.name))); clearForm(); toast("Supervisor added", "success"); }
     else toast("Failed to add", "error");
   };
 
@@ -142,9 +146,9 @@ export default function TeamPage() {
     const name = editNameValue.trim(); if (!name) { setEditingItem(null); return; }
     if (name !== oldName && supervisors.some((s) => s.name === name)) { toast("Name exists", "error"); return; }
     const department = editDeptValue.trim() || null;
-    const manager_name = editManagerValue || null;
+    const manager_names_str = editManagerValues.length > 0 ? editManagerValues.join(",") : null;
     const phone = editPhoneValue.trim() || null;
-    const updates: Record<string, string | null> = { department, manager_name, phone };
+    const updates: Record<string, string | null> = { department, manager_names: manager_names_str, phone };
     if (name !== oldName) updates.name = name;
     const { error } = await supabase.from("supervisors").update(updates).eq("name", oldName);
     if (!error) {
@@ -155,7 +159,7 @@ export default function TeamPage() {
         ]);
         setTasks((p) => p.map((t) => t.supervisor === oldName ? { ...t, supervisor: name } : t));
       }
-      setSupervisors((p) => p.map((s) => s.name === oldName ? { ...s, name, department, manager_name, phone } : s).sort((a, b) => a.name.localeCompare(b.name)));
+      setSupervisors((p) => p.map((s) => s.name === oldName ? { ...s, name, department, manager_names: editManagerValues, phone } : s).sort((a, b) => a.name.localeCompare(b.name)));
       setEditingItem(null); toast("Updated", "success");
     }
   };
@@ -424,11 +428,22 @@ export default function TeamPage() {
                     placeholder="Department *" className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                   <input type="text" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSupervisor()}
                     placeholder="Phone (optional)" className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                  <select value={newManager} onChange={(e) => setNewManager(e.target.value)}
-                    className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
-                    <option value="">Reports to Manager (optional)</option>
-                    {managers.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                  </select>
+                  {managers.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Reports to Manager(s)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {managers.map((m) => (
+                          <label key={m.name} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer transition ${
+                            newManagers.includes(m.name) ? "bg-violet-50 text-violet-700 border-violet-300" : "bg-white text-gray-500 border-border hover:bg-gray-50"
+                          }`}>
+                            <input type="checkbox" className="hidden" checked={newManagers.includes(m.name)}
+                              onChange={(e) => setNewManagers(e.target.checked ? [...newManagers, m.name] : newManagers.filter((n) => n !== m.name))} />
+                            {m.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button onClick={addSupervisor} className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition">
                   <Plus className="w-4 h-4" /> Add Supervisor</button>
@@ -457,11 +472,19 @@ export default function TeamPage() {
                                 <input type="text" value={editPhoneValue} onChange={(e) => setEditPhoneValue(e.target.value)}
                                   onKeyDown={(e) => { if (e.key === "Enter") updateSupervisor(sup.name); if (e.key === "Escape") setEditingItem(null); }}
                                   placeholder="Phone" className="px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-36" />
-                                <select value={editManagerValue} onChange={(e) => setEditManagerValue(e.target.value)}
-                                  className="px-2 py-1 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 w-36">
-                                  <option value="">No Manager</option>
-                                  {managers.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                                </select>
+                                {managers.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {managers.map((m) => (
+                                      <label key={m.name} className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border cursor-pointer transition ${
+                                        editManagerValues.includes(m.name) ? "bg-violet-50 text-violet-700 border-violet-300" : "bg-white text-gray-400 border-border"
+                                      }`}>
+                                        <input type="checkbox" className="hidden" checked={editManagerValues.includes(m.name)}
+                                          onChange={(e) => setEditManagerValues(e.target.checked ? [...editManagerValues, m.name] : editManagerValues.filter((n) => n !== m.name))} />
+                                        {m.name}
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
                                 <div className="flex items-center gap-1.5">
                                   <button onClick={() => updateSupervisor(sup.name)} className="text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
                                   <button onClick={() => setEditingItem(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
@@ -471,7 +494,7 @@ export default function TeamPage() {
                               <>
                                 <p className="text-sm font-bold text-gray-900">{sup.name}</p>
                                 {sup.department && <p className="text-xs text-emerald-500 font-medium">{sup.department}</p>}
-                                {sup.manager_name && <p className="text-xs text-gray-400">Reports to: <span className="font-semibold text-violet-600">{sup.manager_name}</span></p>}
+                                {sup.manager_names.length > 0 && <p className="text-xs text-gray-400">Reports to: <span className="font-semibold text-violet-600">{sup.manager_names.join(", ")}</span></p>}
                                 {sup.phone && <p className="text-xs text-gray-400">Phone: {sup.phone}</p>}
                               </>
                             )}
@@ -480,7 +503,7 @@ export default function TeamPage() {
                         </div>
                         {hasFullAccess && editingItem !== `sup-${sup.name}` && (
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => { setEditingItem(`sup-${sup.name}`); setEditNameValue(sup.name); setEditDeptValue(sup.department || ""); setEditPhoneValue(sup.phone || ""); setEditManagerValue(sup.manager_name || ""); }}
+                            <button onClick={() => { setEditingItem(`sup-${sup.name}`); setEditNameValue(sup.name); setEditDeptValue(sup.department || ""); setEditPhoneValue(sup.phone || ""); setEditManagerValues(sup.manager_names); }}
                               className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
                               <Pencil className="w-3 h-3" /> Edit</button>
                             <button onClick={() => removeSupervisor(sup.name)}

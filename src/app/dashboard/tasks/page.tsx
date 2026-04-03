@@ -51,7 +51,7 @@ export default function TasksPage() {
   useEffect(() => {
     loadData();
     if (taskModalOpen || detailTask) return;
-    const i = setInterval(loadData, 30000);
+    const i = setInterval(loadData, 60000);
     return () => clearInterval(i);
   }, [loadData, taskModalOpen, detailTask]);
 
@@ -166,7 +166,7 @@ export default function TasksPage() {
               <TaskCard key={t.id} task={t}
                 canEdit={canEditTask}
                 canDelete={canDeleteTask}
-                canChangeStatus={hasFullAccess || isSupervisor || (isEmployee && t.assigned_to === userName)}
+                canChangeStatus={hasFullAccess || (isSupervisor && t.supervisor === userName) || (isEmployee && t.assigned_to === userName)}
                 onStatusChange={handleStatusChange}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}
