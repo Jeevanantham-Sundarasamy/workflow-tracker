@@ -45,7 +45,7 @@ export default function SettingsPage() {
   };
 
   const fetchAllData = async () => {
-    const [tasks, managers, supervisors, employees, leaves, settings, notifications, comments, activityLog, attachments, userRoles] = await Promise.all([
+    const [tasks, managers, supervisors, employees, leaves, settings, notifications, comments, activityLog, attachments, userRoles, machineTypes, machineTypeDepts, machineTypeTasks, projects, projectTasks] = await Promise.all([
       supabase.from("tasks").select("*"),
       supabase.from("managers").select("*"),
       supabase.from("supervisors").select("*"),
@@ -57,6 +57,11 @@ export default function SettingsPage() {
       supabase.from("activity_log").select("*"),
       supabase.from("attachments").select("*"),
       supabase.from("user_roles").select("*"),
+      supabase.from("machine_types").select("*"),
+      supabase.from("machine_type_departments").select("*"),
+      supabase.from("machine_type_tasks").select("*"),
+      supabase.from("projects").select("*"),
+      supabase.from("project_tasks").select("*"),
     ]);
     return {
       tasks: tasks.data || [],
@@ -70,6 +75,11 @@ export default function SettingsPage() {
       activity_log: activityLog.data || [],
       attachments: attachments.data || [],
       user_roles: userRoles.data || [],
+      machine_types: machineTypes.data || [],
+      machine_type_departments: machineTypeDepts.data || [],
+      machine_type_tasks: machineTypeTasks.data || [],
+      projects: projects.data || [],
+      project_tasks: projectTasks.data || [],
       exportedAt: new Date().toISOString(),
     };
   };
@@ -110,6 +120,11 @@ export default function SettingsPage() {
       activity_log: data.activity_log,
       attachments: data.attachments,
       user_roles: data.user_roles,
+      machine_types: data.machine_types,
+      machine_type_departments: data.machine_type_departments,
+      machine_type_tasks: data.machine_type_tasks,
+      projects: data.projects,
+      project_tasks: data.project_tasks,
     };
 
     // Build a multi-sheet CSV (sections separated by sheet name headers)
@@ -183,6 +198,9 @@ export default function SettingsPage() {
                   if (d.employees?.length) counts.push(`${d.employees.length} employees`);
                   if (d.tasks?.length) counts.push(`${d.tasks.length} tasks`);
                   if (d.leave_requests?.length) counts.push(`${d.leave_requests.length} leave requests`);
+                  if (d.machine_types?.length) counts.push(`${d.machine_types.length} machine types`);
+                  if (d.projects?.length) counts.push(`${d.projects.length} projects`);
+                  if (d.project_tasks?.length) counts.push(`${d.project_tasks.length} project tasks`);
                   if (!counts.length) { alert("No data found in file"); return; }
                   if (!confirm(`Import ${counts.join(", ")}?`)) return;
 
@@ -203,6 +221,11 @@ export default function SettingsPage() {
                   if (d.comments?.length) await insertRows("comments", d.comments);
                   if (d.activity_log?.length) await insertRows("activity_log", d.activity_log);
                   if (d.attachments?.length) await insertRows("attachments", d.attachments);
+                  if (d.machine_types?.length) await insertRows("machine_types", d.machine_types);
+                  if (d.machine_type_departments?.length) await insertRows("machine_type_departments", d.machine_type_departments);
+                  if (d.machine_type_tasks?.length) await insertRows("machine_type_tasks", d.machine_type_tasks);
+                  if (d.projects?.length) await insertRows("projects", d.projects);
+                  if (d.project_tasks?.length) await insertRows("project_tasks", d.project_tasks);
 
                   alert("Imported successfully! Refresh to see.");
                 } catch (err) { alert("Import failed: " + (err instanceof Error ? err.message : "Unknown error")); }
