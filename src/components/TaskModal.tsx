@@ -69,10 +69,13 @@ export default function TaskModal({
 
   if (!open) return null;
 
-  // Get employees for selected supervisor + employees with no supervisor (report to manager directly)
-  const filteredEmployees = employees.filter(
-    (e) => e.supervisor_name === form.supervisor || !e.supervisor_name
-  );
+  // Get employees for selected manager/supervisor
+  // Show employees under selected person + employees with no supervisor (direct reports to manager)
+  const teamEmployees = employees.filter((e) => e.supervisor_name === form.supervisor);
+  const directReports = employees.filter((e) => !e.supervisor_name);
+  const filteredEmployees = teamEmployees.length > 0
+    ? [...teamEmployees, ...directReports.filter((d) => !teamEmployees.some((t) => t.name === d.name))]
+    : directReports;
 
   const handleSubmit = () => {
     if (!form.task.trim() || !form.due_date) {
@@ -150,7 +153,7 @@ export default function TaskModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                Supervisor
+                Manager / Supervisor
               </label>
               <select
                 value={form.supervisor}

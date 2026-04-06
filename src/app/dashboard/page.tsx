@@ -87,7 +87,7 @@ export default function DashboardPage() {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (filterEmp !== "All" && t.assigned_to !== filterEmp) return false;
-    if (filterMgr !== "All" && t.created_by !== filterMgr) return false;
+    if (filterMgr !== "All" && t.supervisor !== filterMgr) return false;
     return true;
   });
 
@@ -162,7 +162,7 @@ export default function DashboardPage() {
     e.target.value = "";
   };
 
-  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : supervisors;
+  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : [...managers, ...supervisors];
   const modalEmployees = isSupervisor && !hasFullAccess
     ? employees.filter((e) => e.supervisor_name === userName)
     : employees;

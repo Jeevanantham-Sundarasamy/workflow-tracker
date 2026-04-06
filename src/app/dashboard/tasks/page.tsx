@@ -21,6 +21,7 @@ export default function TasksPage() {
   const { hasFullAccess, isSupervisor, isEmployee, userName, role, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
+  const [managers, setManagers] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
@@ -34,15 +35,17 @@ export default function TasksPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er] = await Promise.all([
+      const [tr, sr, er, mr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("name, supervisor_name").order("name"),
+        supabase.from("managers").select("name").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
       setEmployees(er.data || []);
+      setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setConnection("live");
     } catch { setConnection("offline"); }
     setLoading(false);
@@ -124,7 +127,7 @@ export default function TasksPage() {
   };
 
   // For supervisor: only show their supervisors list (just themselves)
-  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : supervisors;
+  const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : [...managers, ...supervisors];
   // For supervisor: only show their team employees
   const modalEmployees = isSupervisor && !hasFullAccess
     ? employees.filter((e) => e.supervisor_name === userName)
