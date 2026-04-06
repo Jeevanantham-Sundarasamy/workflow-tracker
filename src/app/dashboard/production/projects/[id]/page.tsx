@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { Project, ProjectTask, MachineType, Employee } from "@/lib/types";
+import type { Project, ProjectTask, MachineType, Employee, ProjectTaskComment, ProjectTaskActivity } from "@/lib/types";
 import { PROJECT_STATUSES, PROJECT_TASK_STATUSES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/AuthContext";
 import {
   ArrowLeft, Calendar, User, Package, CheckCircle2, XCircle,
   Clock, ChevronDown, ChevronRight, UserPlus, AlertTriangle, Plus, Trash2, X,
+  MessageSquare, Activity, Eye, Send,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
@@ -88,13 +89,25 @@ export default function ProjectDetailPage() {
   const canQC = hasFullAccess || isSupervisor;
 
   const updateTaskStatus = async (taskId: string, status: string) => {
+    const task = tasks.find((t) => t.id === taskId);
     const updates: Record<string, string | null> = { status };
     if (status === "Done") updates.completed_at = new Date().toISOString();
     else { updates.completed_at = null; updates.qc_status = null; updates.qc_by = null; updates.qc_at = null; }
     const { error } = await supabase.from("project_tasks").update(updates).eq("id", taskId);
     if (!error) {
       setTasks((p) => p.map((t) => t.id === taskId ? { ...t, ...updates } as ProjectTask : t));
+      logTaskActivity(taskId, "status_changed", `${task?.status} → ${status}`);
       toast("Status updated", "success");
+    }
+  };
+
+  const updateTaskPriority = async (taskId: string, priority: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    const { error } = await supabase.from("project_tasks").update({ priority }).eq("id", taskId);
+    if (!error) {
+      setTasks((p) => p.map((t) => t.id === taskId ? { ...t, priority: priority as ProjectTask["priority"] } : t));
+      logTaskActivity(taskId, "priority_changed", `${task?.priority} → ${priority}`);
+      toast("Priority updated", "success");
     }
   };
 
@@ -102,6 +115,7 @@ export default function ProjectDetailPage() {
     const { error } = await supabase.from("project_tasks").update({ assigned_to: empName || null }).eq("id", taskId);
     if (!error) {
       setTasks((p) => p.map((t) => t.id === taskId ? { ...t, assigned_to: empName || null } : t));
+      logTaskActivity(taskId, "assigned", empName ? `Assigned to ${empName}` : "Unassigned");
       toast("Assigned", "success");
     }
   };
@@ -114,6 +128,7 @@ export default function ProjectDetailPage() {
     }).eq("id", taskId);
     if (!error) {
       setTasks((p) => p.map((t) => t.id === taskId ? { ...t, qc_status: qcStatus, qc_by: userName || "Admin", qc_at: new Date().toISOString() } : t));
+      logTaskActivity(taskId, "qc", `QC ${qcStatus} by ${userName || "Admin"}`);
       toast(`QC ${qcStatus}`, qcStatus === "Approved" ? "success" : "warning");
     }
   };
@@ -152,6 +167,60 @@ export default function ProjectDetailPage() {
       setTasks((p) => p.filter((t) => t.id !== taskId));
       toast("Task deleted", "success");
     }
+  };
+
+  // Task Detail Modal
+  const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
+  const [detailTab, setDetailTab] = useState<"comments" | "activity">("comments");
+  const [taskComments, setTaskComments] = useState<ProjectTaskComment[]>([]);
+  const [taskActivities, setTaskActivities] = useState<ProjectTaskActivity[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const openTaskDetail = async (task: ProjectTask) => {
+    setDetailTask(task);
+    setDetailTab("comments");
+    setLoadingDetail(true);
+    const [cRes, aRes] = await Promise.all([
+      supabase.from("project_task_comments").select("*").eq("project_task_id", task.id).order("created_at", { ascending: false }),
+      supabase.from("project_task_activity").select("*").eq("project_task_id", task.id).order("created_at", { ascending: false }),
+    ]);
+    setTaskComments(cRes.data || []);
+    setTaskActivities(aRes.data || []);
+    setLoadingDetail(false);
+  };
+
+  const addComment = async () => {
+    if (!detailTask || !newComment.trim()) return;
+    const { data, error } = await supabase.from("project_task_comments").insert({
+      project_task_id: detailTask.id,
+      author: userName || "Admin",
+      message: newComment.trim(),
+    }).select().single();
+    if (!error && data) {
+      setTaskComments((p) => [data, ...p]);
+      setNewComment("");
+      toast("Comment added", "success");
+    }
+  };
+
+  const logTaskActivity = async (taskId: string, action: string, details: string) => {
+    await supabase.from("project_task_activity").insert({
+      project_task_id: taskId,
+      action,
+      details,
+      actor: userName || "Admin",
+    });
+  };
+
+  const timeAgo = (date: string) => {
+    const diff = Date.now() - new Date(date).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
   };
 
   const toggleDept = (dept: string) => {
@@ -261,7 +330,14 @@ export default function ProjectDetailPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               <p className="text-xs font-semibold text-gray-900 truncate">{task.task_name}</p>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                              {canManageTask ? (
+                                <select value={task.priority} onChange={(e) => updateTaskPriority(task.id, e.target.value)}
+                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 cursor-pointer focus:outline-none ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>
+                                  <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                                </select>
+                              ) : (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                              )}
                             </div>
                             {task.assigned_to && <p className="text-[10px] text-gray-400 flex items-center gap-1"><User className="w-2.5 h-2.5" /> {task.assigned_to}</p>}
                           </div>
@@ -308,6 +384,12 @@ export default function ProjectDetailPage() {
                             )
                           )}
 
+                          {/* Detail */}
+                          <button onClick={() => openTaskDetail(task)}
+                            className="text-gray-300 hover:text-primary-600 transition flex-shrink-0">
+                            <Eye className="w-3 h-3" />
+                          </button>
+
                           {/* Delete task */}
                           {canManageTask && (
                             <button onClick={() => deleteProjectTask(task.id)}
@@ -352,6 +434,90 @@ export default function ProjectDetailPage() {
           })}
         </div>
       </div>
+
+      {/* Task Detail Modal */}
+      {detailTask && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setDetailTask(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-start justify-between p-6 pb-0">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">{detailTask.task_name}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-gray-400">{detailTask.department_name}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${detailTask.priority === "High" ? "text-red-600 bg-red-50" : detailTask.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{detailTask.priority}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${taskStatusColors[detailTask.status]?.bg} ${taskStatusColors[detailTask.status]?.text}`}>{detailTask.status}</span>
+                </div>
+                {detailTask.assigned_to && <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1"><User className="w-2.5 h-2.5" /> {detailTask.assigned_to}</p>}
+              </div>
+              <button onClick={() => setDetailTask(null)} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1 px-6 mt-4">
+              <button onClick={() => setDetailTab("comments")}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition ${detailTab === "comments" ? "bg-primary-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+                <MessageSquare className="w-3 h-3" /> Comments ({taskComments.length})
+              </button>
+              <button onClick={() => setDetailTab("activity")}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition ${detailTab === "activity" ? "bg-primary-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+                <Activity className="w-3 h-3" /> Activity ({taskActivities.length})
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 pt-3">
+              {loadingDetail ? (
+                <div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>
+              ) : detailTab === "comments" ? (
+                <div className="space-y-3">
+                  {taskComments.length > 0 ? taskComments.map((c) => (
+                    <div key={c.id} className="bg-gray-50 rounded-xl p-3 border border-border-light">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-gray-700">{c.author}</span>
+                        <span className="text-[9px] text-gray-400">{timeAgo(c.created_at)}</span>
+                      </div>
+                      <p className="text-xs text-gray-600">{c.message}</p>
+                    </div>
+                  )) : (
+                    <p className="text-xs text-gray-400 text-center py-6">No comments yet</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {taskActivities.length > 0 ? taskActivities.map((a) => (
+                    <div key={a.id} className="flex items-start gap-2 py-2 border-b border-border-light last:border-0">
+                      <Activity className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700"><span className="font-semibold">{a.actor}</span> — {a.action}</p>
+                        {a.details && <p className="text-[10px] text-gray-400">{a.details}</p>}
+                      </div>
+                      <span className="text-[9px] text-gray-400 flex-shrink-0">{timeAgo(a.created_at)}</span>
+                    </div>
+                  )) : (
+                    <p className="text-xs text-gray-400 text-center py-6">No activity yet</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Add Comment */}
+            {detailTab === "comments" && (
+              <div className="border-t border-border p-4 flex gap-2">
+                <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addComment()}
+                  placeholder="Write a comment..."
+                  className="flex-1 px-3 py-2 rounded-xl border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                <button onClick={addComment} disabled={!newComment.trim()}
+                  className="w-9 h-9 rounded-xl bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition disabled:opacity-50">
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
         onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />

@@ -45,7 +45,7 @@ export default function SettingsPage() {
   };
 
   const fetchAllData = async () => {
-    const [tasks, managers, supervisors, employees, leaves, settings, notifications, comments, activityLog, attachments, userRoles, machineTypes, machineTypeDepts, machineTypeTasks, projects, projectTasks] = await Promise.all([
+    const [tasks, managers, supervisors, employees, leaves, settings, notifications, comments, activityLog, attachments, userRoles, machineTypes, machineTypeDepts, machineTypeTasks, projects, projectTasks, projectTaskComments, projectTaskActivity] = await Promise.all([
       supabase.from("tasks").select("*"),
       supabase.from("managers").select("*"),
       supabase.from("supervisors").select("*"),
@@ -62,6 +62,8 @@ export default function SettingsPage() {
       supabase.from("machine_type_tasks").select("*"),
       supabase.from("projects").select("*"),
       supabase.from("project_tasks").select("*"),
+      supabase.from("project_task_comments").select("*"),
+      supabase.from("project_task_activity").select("*"),
     ]);
     return {
       tasks: tasks.data || [],
@@ -80,6 +82,8 @@ export default function SettingsPage() {
       machine_type_tasks: machineTypeTasks.data || [],
       projects: projects.data || [],
       project_tasks: projectTasks.data || [],
+      project_task_comments: projectTaskComments.data || [],
+      project_task_activity: projectTaskActivity.data || [],
       exportedAt: new Date().toISOString(),
     };
   };
@@ -125,6 +129,8 @@ export default function SettingsPage() {
       machine_type_tasks: data.machine_type_tasks,
       projects: data.projects,
       project_tasks: data.project_tasks,
+      project_task_comments: data.project_task_comments,
+      project_task_activity: data.project_task_activity,
     };
 
     // Build a multi-sheet CSV (sections separated by sheet name headers)
@@ -226,6 +232,8 @@ export default function SettingsPage() {
                   if (d.machine_type_tasks?.length) await insertRows("machine_type_tasks", d.machine_type_tasks);
                   if (d.projects?.length) await insertRows("projects", d.projects);
                   if (d.project_tasks?.length) await insertRows("project_tasks", d.project_tasks);
+                  if (d.project_task_comments?.length) await insertRows("project_task_comments", d.project_task_comments);
+                  if (d.project_task_activity?.length) await insertRows("project_task_activity", d.project_task_activity);
 
                   alert("Imported successfully! Refresh to see.");
                 } catch (err) { alert("Import failed: " + (err instanceof Error ? err.message : "Unknown error")); }

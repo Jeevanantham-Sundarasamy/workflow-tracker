@@ -210,7 +210,28 @@ CREATE TABLE project_tasks (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- 17. Production task comments
+CREATE TABLE project_task_comments (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  project_task_id BIGINT NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+  author TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 18. Production task activity log
+CREATE TABLE project_task_activity (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  project_task_id BIGINT NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  details TEXT,
+  actor TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Disable Row Level Security
+ALTER TABLE project_task_comments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE project_task_activity DISABLE ROW LEVEL SECURITY;
 ALTER TABLE managers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE supervisors DISABLE ROW LEVEL SECURITY;

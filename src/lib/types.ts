@@ -174,6 +174,23 @@ export interface ProjectTask {
   created_at: string;
 }
 
+export interface ProjectTaskComment {
+  id: string;
+  project_task_id: string;
+  author: string;
+  message: string;
+  created_at: string;
+}
+
+export interface ProjectTaskActivity {
+  id: string;
+  project_task_id: string;
+  action: string;
+  details: string | null;
+  actor: string;
+  created_at: string;
+}
+
 export const PROJECT_STATUSES = ["Active", "Completed", "On Hold"] as const;
 export const PROJECT_TASK_STATUSES = ["Pending", "In Progress", "Done"] as const;
 export const QC_STATUSES = ["Approved", "Rejected"] as const;
