@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import {
   ArrowLeft, Calendar, User, Package, CheckCircle2, XCircle,
-  Clock, ChevronDown, ChevronRight, UserPlus, AlertTriangle,
+  Clock, ChevronDown, ChevronRight, UserPlus, AlertTriangle, Plus, Trash2, X,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
@@ -39,6 +39,9 @@ export default function ProjectDetailPage() {
   const [employees, setEmployees] = useState<{ name: string }[]>([]);
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [addingTaskToDept, setAddingTaskToDept] = useState<string | null>(null);
+  const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("Medium");
 
   const loadData = useCallback(async () => {
     try {
@@ -121,6 +124,33 @@ export default function ProjectDetailPage() {
     if (!error) {
       setProject({ ...project, status: status as Project["status"] });
       toast("Project status updated", "success");
+    }
+  };
+
+  const addTaskToDept = async (deptName: string) => {
+    const name = newTaskName.trim();
+    if (!name) { toast("Task name required", "error"); return; }
+    const sortOrder = getDeptTasks(deptName).length;
+    const { data, error } = await supabase.from("project_tasks").insert({
+      project_id: projectId,
+      department_name: deptName,
+      task_name: name,
+      priority: newTaskPriority,
+      sort_order: sortOrder,
+    }).select().single();
+    if (!error && data) {
+      setTasks((p) => [...p, data]);
+      setNewTaskName(""); setNewTaskPriority("Medium"); setAddingTaskToDept(null);
+      toast("Task added", "success");
+    } else toast("Failed to add", "error");
+  };
+
+  const deleteProjectTask = async (taskId: string) => {
+    if (!confirm("Delete this task?")) return;
+    const { error } = await supabase.from("project_tasks").delete().eq("id", taskId);
+    if (!error) {
+      setTasks((p) => p.filter((t) => t.id !== taskId));
+      toast("Task deleted", "success");
     }
   };
 
@@ -277,9 +307,44 @@ export default function ProjectDetailPage() {
                               <span className="text-[10px] text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3" /> Awaiting QC</span>
                             )
                           )}
+
+                          {/* Delete task */}
+                          {canManageTask && (
+                            <button onClick={() => deleteProjectTask(task.id)}
+                              className="text-gray-300 hover:text-red-500 transition flex-shrink-0">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
+
+                    {/* Add Task */}
+                    {canManageTask && (
+                      <div className="px-5 py-3 border-t border-border-light">
+                        {addingTaskToDept === dept ? (
+                          <div className="flex items-center gap-2">
+                            <input type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && addTaskToDept(dept)}
+                              placeholder="Task name" autoFocus
+                              className="flex-1 px-3 py-1.5 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                            <select value={newTaskPriority} onChange={(e) => setNewTaskPriority(e.target.value)}
+                              className="px-2 py-1.5 rounded-lg border border-border text-[10px] font-bold focus:outline-none">
+                              <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                            </select>
+                            <button onClick={() => addTaskToDept(dept)}
+                              className="text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3 py-1.5 rounded-lg transition">Add</button>
+                            <button onClick={() => { setAddingTaskToDept(null); setNewTaskName(""); setNewTaskPriority("Medium"); }}
+                              className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setAddingTaskToDept(dept); setNewTaskName(""); }}
+                            className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                            <Plus className="w-3.5 h-3.5" /> Add Task
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

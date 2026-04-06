@@ -200,10 +200,27 @@ export default function MachineTypesPage() {
     const name = inlineNewTask.trim(); if (!name) return;
     const dept = machineTypes.find((m) => m.id === mtId)?.departments.find((d) => d.id === deptId);
     const sortOrder = dept?.tasks.length || 0;
+    const deptName = dept?.name || "";
     const { data, error } = await supabase.from("machine_type_tasks").insert({ department_id: deptId, name, priority: inlineNewTaskPriority, sort_order: sortOrder }).select().single();
     if (!error && data) {
       setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: m.departments.map((d) => d.id === deptId ? { ...d, tasks: [...d.tasks, data] } : d) } : m));
-      setInlineNewTask(""); setInlineNewTaskPriority("Medium"); toast("Task added", "success");
+
+      // Also add this task to all existing projects of this machine type
+      const { data: projects } = await supabase.from("projects").select("id").eq("machine_type_id", mtId).neq("status", "Completed");
+      if (projects && projects.length > 0) {
+        const projectTasks = projects.map((p: { id: string }) => ({
+          project_id: p.id,
+          department_name: deptName,
+          task_name: name,
+          priority: inlineNewTaskPriority,
+          sort_order: sortOrder,
+        }));
+        await supabase.from("project_tasks").insert(projectTasks);
+        toast(`Task added to template + ${projects.length} existing project${projects.length > 1 ? "s" : ""}`, "success");
+      } else {
+        toast("Task added to template", "success");
+      }
+      setInlineNewTask(""); setInlineNewTaskPriority("Medium");
     }
   };
 

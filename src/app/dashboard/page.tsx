@@ -21,7 +21,7 @@ import LoginRequired from "@/components/LoginRequired";
 
 export default function DashboardPage() {
   const { toast } = useToast();
-  const { hasFullAccess, isSupervisor, userName, login } = useAuth();
+  const { hasFullAccess, isSupervisor, isEmployee, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
@@ -74,6 +74,7 @@ export default function DashboardPage() {
   const roleFiltered = tasks.filter((t) => {
     if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName;
+    if (isEmployee) return t.assigned_to === userName;
     return true;
   });
 
@@ -164,7 +165,7 @@ export default function DashboardPage() {
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <h2 className="text-base font-bold text-gray-900 mr-auto">
-                    {isSupervisor && !hasFullAccess ? "Team Tasks" : "Tasks"}
+                    {isEmployee ? "My Tasks" : isSupervisor && !hasFullAccess ? "Team Tasks" : "Tasks"}
                     <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span>
                   </h2>
                   {hasFullAccess && (
@@ -194,7 +195,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-3">
                   {filtered.length ? filtered.map((t) => (
-                    <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask} canChangeStatus={true}
+                    <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask}
+                      canChangeStatus={hasFullAccess || (isSupervisor && t.supervisor === userName) || (isEmployee && t.assigned_to === userName)}
                       onStatusChange={handleStatusChange}
                       onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                       onDelete={handleDelete} onViewDetail={(task) => setDetailTask(task)} />
