@@ -355,6 +355,7 @@ export default function TeamPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredManagers.map((mgr) => {
                   const initials = mgr.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+                  const mgrTasks = tasks.filter((t) => t.created_by === mgr.name);
                   return (
                     <div key={mgr.name} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition">
                       <div className="flex items-start justify-between mb-3">
@@ -384,7 +385,7 @@ export default function TeamPage() {
                                 <p className="text-sm font-bold text-gray-900">{mgr.name}</p>
                                 {mgr.department && <p className="text-xs text-violet-500 font-medium">{mgr.department}</p>}
                                 {mgr.phone && <p className="text-xs text-gray-400">Phone: {mgr.phone}</p>}
-                                <p className="text-[10px] text-gray-400 font-semibold uppercase">Manager</p>
+                                <p className="text-xs text-gray-400">{mgrTasks.length} task{mgrTasks.length !== 1 ? "s" : ""}</p>
                               </>
                             )}
                           </div>
@@ -401,6 +402,21 @@ export default function TeamPage() {
                         )}
                       </div>
                       {isAdmin && <PinSection id={`mgr-${mgr.name}`} pin={mgr.pin} onUpdate={() => updateManagerPin(mgr.name)} />}
+                      {mgrTasks.length > 0 && (
+                        <div className="space-y-2 bg-surface-secondary rounded-xl p-3 mt-3">
+                          {STATUSES.filter((s) => mgrTasks.some((t) => t.status === s)).map((s) => (
+                            <div key={s} className="flex items-center gap-2.5 text-xs">
+                              <span className={`w-2 h-2 rounded-full ${dotColor[s]}`} />
+                              <span className="text-gray-500">{s}</span>
+                              <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${dotColor[s] || "bg-gray-400"}`}
+                                  style={{ width: `${(mgrTasks.filter((t) => t.status === s).length / mgrTasks.length) * 100}%` }} />
+                              </div>
+                              <span className="font-bold text-gray-700 min-w-[20px] text-right">{mgrTasks.filter((t) => t.status === s).length}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -586,6 +602,7 @@ export default function TeamPage() {
             {filteredEmployees.length ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredEmployees.map((emp) => {
+                  const empTasks = tasks.filter((t) => t.assigned_to === emp.name);
                   const initials = emp.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
                   return (
                     <div key={emp.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition">
@@ -625,7 +642,7 @@ export default function TeamPage() {
                               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-sm font-bold">{initials}</div>
                               <div>
                                 <p className="text-sm font-bold text-gray-900">{emp.name}</p>
-                                <p className="text-xs text-gray-400">{emp.designation || "Employee"}</p>
+                                <p className="text-xs text-gray-400">{emp.designation || "Employee"} · {empTasks.length} task{empTasks.length !== 1 ? "s" : ""}</p>
                               </div>
                             </div>
                             {hasFullAccess && (
@@ -650,6 +667,21 @@ export default function TeamPage() {
                             {emp.phone && <div className="text-xs text-gray-500">Phone: {emp.phone}</div>}
                           </div>
                           {hasFullAccess && <PinSection id={`emp-${emp.id}`} pin={emp.pin} onUpdate={() => updateEmployeePin(emp.id)} />}
+                          {empTasks.length > 0 && (
+                            <div className="space-y-2 bg-surface-secondary rounded-xl p-3 mt-3">
+                              {STATUSES.filter((s) => empTasks.some((t) => t.status === s)).map((s) => (
+                                <div key={s} className="flex items-center gap-2.5 text-xs">
+                                  <span className={`w-2 h-2 rounded-full ${dotColor[s]}`} />
+                                  <span className="text-gray-500">{s}</span>
+                                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${dotColor[s] || "bg-gray-400"}`}
+                                      style={{ width: `${(empTasks.filter((t) => t.status === s).length / empTasks.length) * 100}%` }} />
+                                  </div>
+                                  <span className="font-bold text-gray-700 min-w-[20px] text-right">{empTasks.filter((t) => t.status === s).length}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

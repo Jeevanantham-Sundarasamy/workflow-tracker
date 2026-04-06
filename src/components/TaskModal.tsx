@@ -69,9 +69,9 @@ export default function TaskModal({
 
   if (!open) return null;
 
-  // Get employees for selected supervisor
+  // Get employees for selected supervisor + employees with no supervisor (report to manager directly)
   const filteredEmployees = employees.filter(
-    (e) => e.supervisor_name === form.supervisor
+    (e) => e.supervisor_name === form.supervisor || !e.supervisor_name
   );
 
   const handleSubmit = () => {

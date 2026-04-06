@@ -29,22 +29,27 @@ export default function DashboardPage() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterSup, setFilterSup] = useState("All");
+  const [filterEmp, setFilterEmp] = useState("All");
+  const [managers, setManagers] = useState<string[]>([]);
+  const [filterMgr, setFilterMgr] = useState("All");
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er] = await Promise.all([
+      const [tr, sr, er, mr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("name, supervisor_name").order("name"),
+        supabase.from("managers").select("name").order("name"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
       setEmployees(er.data || []);
+      setManagers((mr.data || []).map((m: { name: string }) => m.name));
     } catch { /* offline */ }
     setLoading(false);
   }, []);
@@ -78,14 +83,24 @@ export default function DashboardPage() {
     return true;
   });
 
-  const filtered = roleFiltered.filter(
-    (t) => (filterStatus === "All" || t.status === filterStatus) && (filterSup === "All" || t.supervisor === filterSup)
-  );
+  const filtered = roleFiltered.filter((t) => {
+    if (filterStatus !== "All" && t.status !== filterStatus) return false;
+    if (filterSup !== "All" && t.supervisor !== filterSup) return false;
+    if (filterEmp !== "All" && t.assigned_to !== filterEmp) return false;
+    if (filterMgr !== "All" && t.created_by !== filterMgr) return false;
+    return true;
+  });
 
   const canCreateTask = hasFullAccess || isSupervisor;
   const canEditTask = hasFullAccess || isSupervisor;
   const canDeleteTask = hasFullAccess;
   const roleName = userName || "Admin";
+
+  const handlePriorityChange = async (id: string, priority: string) => {
+    setTasks((p) => p.map((t) => (t.id === id ? { ...t, priority: priority as Task["priority"] } : t)));
+    await supabase.from("tasks").update({ priority }).eq("id", id);
+    toast("Priority updated", "success");
+  };
 
   const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
@@ -169,12 +184,24 @@ export default function DashboardPage() {
                     <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span>
                   </h2>
                   {hasFullAccess && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <Filter className="w-3.5 h-3.5 text-gray-400" />
+                      {managers.length > 0 && (
+                        <select value={filterMgr} onChange={(e) => setFilterMgr(e.target.value)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                          <option value="All">All Managers</option>
+                          {managers.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      )}
                       <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
                         className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
                         <option value="All">All Supervisors</option>
                         {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select value={filterEmp} onChange={(e) => setFilterEmp(e.target.value)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                        <option value="All">All Employees</option>
+                        {employees.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
                       </select>
                     </div>
                   )}
@@ -198,6 +225,7 @@ export default function DashboardPage() {
                     <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask}
                       canChangeStatus={hasFullAccess || (isSupervisor && t.supervisor === userName) || (isEmployee && t.assigned_to === userName)}
                       onStatusChange={handleStatusChange}
+                      onPriorityChange={canEditTask ? handlePriorityChange : undefined}
                       onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                       onDelete={handleDelete} onViewDetail={(task) => setDetailTask(task)} />
                   )) : (

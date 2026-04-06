@@ -227,6 +227,8 @@ export default function SettingsPage() {
                   if (d.comments?.length) await insertRows("comments", d.comments);
                   if (d.activity_log?.length) await insertRows("activity_log", d.activity_log);
                   if (d.attachments?.length) await insertRows("attachments", d.attachments);
+                  if (d.settings?.length) await insertRows("settings", d.settings);
+                  if (d.user_roles?.length) await insertRows("user_roles", d.user_roles);
                   if (d.machine_types?.length) await insertRows("machine_types", d.machine_types);
                   if (d.machine_type_departments?.length) await insertRows("machine_type_departments", d.machine_type_departments);
                   if (d.machine_type_tasks?.length) await insertRows("machine_type_tasks", d.machine_type_tasks);

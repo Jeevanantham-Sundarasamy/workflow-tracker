@@ -3,7 +3,7 @@
 import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X } from "lucide-react";
 import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
-import { STATUSES } from "@/lib/types";
+import { STATUSES, PRIORITIES } from "@/lib/types";
 
 interface TaskCardProps {
   task: Task;
@@ -11,6 +11,7 @@ interface TaskCardProps {
   canDelete: boolean;
   canChangeStatus: boolean;
   onStatusChange: (id: string, status: string, comment?: string) => void;
+  onPriorityChange?: (id: string, priority: string) => void;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
   onViewDetail?: (task: Task) => void;
@@ -37,6 +38,7 @@ function TaskCard({
   canDelete,
   canChangeStatus,
   onStatusChange,
+  onPriorityChange,
   onEdit,
   onDelete,
   onViewDetail,
@@ -105,10 +107,17 @@ function TaskCard({
             {task.assigned_to}
           </span>
         )}
-        <span className={`flex items-center gap-1.5 font-semibold ${priorityStyles[task.priority]}`}>
-          <Flag className="w-3.5 h-3.5" />
-          {task.priority}
-        </span>
+        {canEdit && onPriorityChange ? (
+          <select value={task.priority} onChange={(e) => onPriorityChange(task.id, e.target.value)}
+            className={`flex items-center text-xs font-semibold px-2 py-0.5 rounded-lg border border-transparent hover:border-border cursor-pointer focus:outline-none ${priorityStyles[task.priority]}`}>
+            {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        ) : (
+          <span className={`flex items-center gap-1.5 font-semibold ${priorityStyles[task.priority]}`}>
+            <Flag className="w-3.5 h-3.5" />
+            {task.priority}
+          </span>
+        )}
         <span className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5" />
           {task.due_date}

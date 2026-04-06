@@ -80,6 +80,12 @@ export default function TasksPage() {
   const canEditTask = hasFullAccess || isSupervisor;
   const canDeleteTask = hasFullAccess;
 
+  const handlePriorityChange = async (id: string, priority: string) => {
+    setTasks((p) => p.map((t) => (t.id === id ? { ...t, priority: priority as Task["priority"] } : t)));
+    await supabase.from("tasks").update({ priority }).eq("id", id);
+    toast("Priority updated", "success");
+  };
+
   const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"] } : t)));
@@ -168,6 +174,7 @@ export default function TasksPage() {
                 canDelete={canDeleteTask}
                 canChangeStatus={hasFullAccess || (isSupervisor && t.supervisor === userName) || (isEmployee && t.assigned_to === userName)}
                 onStatusChange={handleStatusChange}
+                onPriorityChange={canEditTask ? handlePriorityChange : undefined}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}
                 onViewDetail={(task) => setDetailTask(task)} />
