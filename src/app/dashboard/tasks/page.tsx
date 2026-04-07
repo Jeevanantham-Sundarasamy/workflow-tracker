@@ -72,12 +72,14 @@ export default function TasksPage() {
     return true; // guest sees all
   });
 
+  const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
+
   const filtered = roleFiltered.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  });
+  }).sort((a, b) => (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4));
 
   const canCreateTask = hasFullAccess || isSupervisor;
   const canEditTask = hasFullAccess || isSupervisor;

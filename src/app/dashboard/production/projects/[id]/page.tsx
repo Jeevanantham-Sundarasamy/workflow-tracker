@@ -68,8 +68,16 @@ export default function ProjectDetailPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   // Group tasks by department
-  const departments = Array.from(new Set(tasks.map((t) => t.department_name)));
-  const getDeptTasks = (dept: string) => tasks.filter((t) => t.department_name === dept);
+  const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
+  const getDeptRank = (dept: string) => {
+    const deptTasks = tasks.filter((t) => t.department_name === dept);
+    if (!deptTasks.length) return 4;
+    return Math.min(...deptTasks.map((t) => priorityOrder[t.priority.toLowerCase()] ?? 4));
+  };
+  const departments = Array.from(new Set(tasks.map((t) => t.department_name)))
+    .sort((a, b) => getDeptRank(a) - getDeptRank(b));
+  const getDeptTasks = (dept: string) => tasks.filter((t) => t.department_name === dept)
+    .sort((a, b) => (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4));
   const getDeptProgress = (dept: string) => {
     const dt = getDeptTasks(dept);
     if (!dt.length) return 0;
