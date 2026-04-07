@@ -64,7 +64,7 @@ export default function MachineTypesPage() {
           departments: mtDepts.map((d: MachineTypeDepartment) => ({
             ...d,
             tasks: (tasks || []).filter((t: MachineTypeTask) => t.department_id === d.id)
-              .sort((a, b) => (pOrder[a.priority.toLowerCase()] ?? 4) - (pOrder[b.priority.toLowerCase()] ?? 4)),
+              .sort((a: MachineTypeTask, b: MachineTypeTask) => (pOrder[a.priority.toLowerCase()] ?? 4) - (pOrder[b.priority.toLowerCase()] ?? 4)),
           })),
         };
       });

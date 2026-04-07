@@ -24,8 +24,6 @@ const statusStyles: Record<string, string> = {
   Delayed: "bg-red-50 text-red-700 border-red-200",
   "On Hold": "bg-orange-50 text-orange-700 border-orange-200",
   Cancelled: "bg-gray-100 text-gray-500 border-gray-300",
-  complete: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  incomplete: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
 const priorityStyles = {
@@ -90,12 +88,12 @@ function TaskCard({
         </div>
         <span
           className={`text-[11px] font-bold px-3 py-1 rounded-full border flex-shrink-0 ${
-            task.status === "Done" || task.status === "complete"
+            task.status === "Done"
               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
               : "bg-amber-50 text-amber-700 border-amber-200"
           }`}
         >
-          {task.status === "Done" || task.status === "complete" ? "Done" : "Pending"}
+          {task.status === "Done" ? "Done" : "Pending"}
         </span>
       </div>
 
@@ -146,18 +144,18 @@ function TaskCard({
         {canChangeStatus && (
           <div className="flex gap-1.5">
             <button
-              onClick={() => { if (task.status !== "Done" && task.status !== "complete") handleStatusClick("Done"); }}
+              onClick={() => { if (task.status !== "Done") handleStatusClick("Done"); }}
               className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition ${
-                task.status === "Done" || task.status === "complete"
+                task.status === "Done"
                   ? "bg-emerald-500 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600"
               }`}>
               Complete
             </button>
             <button
-              onClick={() => { if (task.status === "Done" || task.status === "complete") handleStatusClick("Pending"); }}
+              onClick={() => { if (task.status === "Done") handleStatusClick("Pending"); }}
               className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition ${
-                task.status !== "Done" && task.status !== "complete"
+                task.status !== "Done"
                   ? "bg-gray-500 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}>
