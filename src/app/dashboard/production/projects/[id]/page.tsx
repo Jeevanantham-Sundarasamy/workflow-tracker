@@ -12,10 +12,11 @@ import { useAuth } from "@/lib/AuthContext";
 import {
   ArrowLeft, Calendar, User, Package, CheckCircle2, XCircle,
   Clock, ChevronDown, ChevronRight, UserPlus, AlertTriangle, Plus, Trash2, X,
-  MessageSquare, Activity, Eye, Send,
+  MessageSquare, Activity, Eye, Send, GripVertical,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 
 const taskStatusColors: Record<string, { bg: string; text: string }> = {
   Pending: { bg: "bg-gray-100", text: "text-gray-600" },
@@ -43,15 +44,17 @@ export default function ProjectDetailPage() {
   const [addingTaskToDept, setAddingTaskToDept] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("Medium");
+  const [deptOrder, setDeptOrder] = useState<string[] | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [pRes, ptRes, eRes, sRes, mRes] = await Promise.all([
+      const [pRes, ptRes, eRes, sRes, mRes, orderRes] = await Promise.all([
         supabase.from("projects").select("*").eq("id", projectId).single(),
         supabase.from("project_tasks").select("*").eq("project_id", projectId).order("sort_order"),
         supabase.from("employees").select("name").order("name"),
         supabase.from("supervisors").select("name").order("name"),
         supabase.from("managers").select("name").order("name"),
+        supabase.from("settings").select("value").eq("key", `project_${projectId}_dept_order`).single(),
       ]);
       if (pRes.data) {
         setProject(pRes.data);
@@ -63,6 +66,10 @@ export default function ProjectDetailPage() {
       const uniqueStaff = Array.from(new Map(allStaff.map((s) => [s.name, s])).values())
         .sort((a, b) => a.name.localeCompare(b.name));
       setEmployees(uniqueStaff);
+      // Load saved department order
+      if (orderRes.data?.value) {
+        try { setDeptOrder(JSON.parse(orderRes.data.value)); } catch { /* ignore */ }
+      }
       // Auto-expand all departments
       const deptNames = new Set<string>((ptRes.data || []).map((t: ProjectTask) => t.department_name));
       setExpandedDepts(deptNames);
@@ -74,13 +81,10 @@ export default function ProjectDetailPage() {
 
   // Group tasks by department
   const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
-  const getDeptRank = (dept: string) => {
-    const deptTasks = tasks.filter((t) => t.department_name === dept);
-    if (!deptTasks.length) return 4;
-    return Math.min(...deptTasks.map((t) => priorityOrder[t.priority.toLowerCase()] ?? 4));
-  };
-  const departments = Array.from(new Set(tasks.map((t) => t.department_name)))
-    .sort((a, b) => getDeptRank(a) - getDeptRank(b));
+  const allDeptNames = Array.from(new Set(tasks.map((t) => t.department_name)));
+  const departments = deptOrder
+    ? [...deptOrder.filter((d) => allDeptNames.includes(d)), ...allDeptNames.filter((d) => !deptOrder.includes(d))]
+    : allDeptNames;
   const getDeptTasks = (dept: string) => tasks.filter((t) => t.department_name === dept)
     .sort((a, b) => (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4));
   const getDeptProgress = (dept: string) => {
@@ -244,6 +248,25 @@ export default function ProjectDetailPage() {
     });
   };
 
+  // Drag and drop departments
+  const handleDeptDragEnd = async (result: DropResult) => {
+    if (!result.destination || result.destination.index === result.source.index) return;
+    const reordered = Array.from(departments);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    setDeptOrder(reordered);
+    // Upsert to settings table
+    const key = `project_${projectId}_dept_order`;
+    const value = JSON.stringify(reordered);
+    const { data: existing } = await supabase.from("settings").select("id").eq("key", key).single();
+    if (existing) {
+      await supabase.from("settings").update({ value }).eq("key", key);
+    } else {
+      await supabase.from("settings").insert({ key, value });
+    }
+    toast("Department order saved", "success");
+  };
+
   if (loading) return (
     <div className="flex flex-col min-h-screen">
       <Topbar onLoginClick={() => setPinModalOpen(true)} />
@@ -305,23 +328,33 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Department Breakdown */}
-        <div className="space-y-3">
-          {departments.map((dept) => {
+        <DragDropContext onDragEnd={handleDeptDragEnd}>
+          <Droppable droppableId="project-departments">
+            {(provided) => (
+        <div className="space-y-3" ref={provided.innerRef} {...provided.droppableProps}>
+          {departments.map((dept, deptIndex) => {
             const deptTasks = getDeptTasks(dept);
             const deptProgress = getDeptProgress(dept);
             const isOpen = expandedDepts.has(dept);
             const deptDone = deptTasks.filter((t) => t.status === "Done").length;
 
             return (
-              <div key={dept} className="bg-white rounded-2xl border border-border overflow-hidden">
-                <button onClick={() => toggleDept(dept)}
-                  className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-gray-50 transition">
+              <Draggable key={dept} draggableId={dept} index={deptIndex}>
+                {(provided, snapshot) => (
+              <div ref={provided.innerRef} {...provided.draggableProps}
+                className={`bg-white rounded-2xl border border-border overflow-hidden ${snapshot.isDragging ? "shadow-lg ring-2 ring-primary-500/30" : ""}`}>
+                <div className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-gray-50 transition">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-bold text-gray-900">{dept}</h3>
-                      <p className="text-xs text-gray-400">{deptDone}/{deptTasks.length} tasks done</p>
-                    </div>
+                    <span {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing flex-shrink-0">
+                      <GripVertical className="w-4 h-4 text-gray-300 hover:text-gray-500" />
+                    </span>
+                    <button onClick={() => toggleDept(dept)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-bold text-gray-900">{dept}</h3>
+                        <p className="text-xs text-gray-400">{deptDone}/{deptTasks.length} tasks done</p>
+                      </div>
+                    </button>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -330,7 +363,7 @@ export default function ProjectDetailPage() {
                     </div>
                     <span className="text-xs font-bold text-gray-700 w-8 text-right">{deptProgress}%</span>
                   </div>
-                </button>
+                </div>
 
                 {isOpen && (
                   <div className="border-t border-border">
@@ -443,9 +476,15 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </div>
+                )}
+              </Draggable>
             );
           })}
+          {provided.placeholder}
         </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </div>
 
       {/* Task Detail Modal */}
