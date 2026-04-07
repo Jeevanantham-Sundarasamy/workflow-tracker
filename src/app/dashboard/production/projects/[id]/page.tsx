@@ -46,10 +46,12 @@ export default function ProjectDetailPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [pRes, ptRes, eRes] = await Promise.all([
+      const [pRes, ptRes, eRes, sRes, mRes] = await Promise.all([
         supabase.from("projects").select("*").eq("id", projectId).single(),
         supabase.from("project_tasks").select("*").eq("project_id", projectId).order("sort_order"),
         supabase.from("employees").select("name").order("name"),
+        supabase.from("supervisors").select("name").order("name"),
+        supabase.from("managers").select("name").order("name"),
       ]);
       if (pRes.data) {
         setProject(pRes.data);
@@ -57,7 +59,10 @@ export default function ProjectDetailPage() {
         setMachineType(mt);
       }
       setTasks(ptRes.data || []);
-      setEmployees(eRes.data || []);
+      const allStaff = [...(eRes.data || []), ...(sRes.data || []), ...(mRes.data || [])];
+      const uniqueStaff = Array.from(new Map(allStaff.map((s) => [s.name, s])).values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setEmployees(uniqueStaff);
       // Auto-expand all departments
       const deptNames = new Set<string>((ptRes.data || []).map((t: ProjectTask) => t.department_name));
       setExpandedDepts(deptNames);
