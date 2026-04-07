@@ -3,7 +3,7 @@
 import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X } from "lucide-react";
 import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
-import { PRIORITIES } from "@/lib/types";
+import { STATUSES, PRIORITIES } from "@/lib/types";
 
 interface TaskCardProps {
   task: Task;
@@ -88,12 +88,10 @@ function TaskCard({
         </div>
         <span
           className={`text-[11px] font-bold px-3 py-1 rounded-full border flex-shrink-0 ${
-            task.status === "Done"
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-amber-50 text-amber-700 border-amber-200"
+            statusStyles[task.status] || statusStyles.Pending
           }`}
         >
-          {task.status === "Done" ? "Done" : "Pending"}
+          {task.status}
         </span>
       </div>
 
@@ -142,25 +140,23 @@ function TaskCard({
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1 flex-wrap">
         {canChangeStatus && (
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => { if (task.status !== "Done") handleStatusClick("Done"); }}
-              className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition ${
-                task.status === "Done"
-                  ? "bg-emerald-500 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600"
-              }`}>
-              Complete
-            </button>
-            <button
-              onClick={() => { if (task.status === "Done") handleStatusClick("Pending"); }}
-              className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition ${
-                task.status !== "Done"
-                  ? "bg-gray-500 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}>
-              Incomplete
-            </button>
+          <div className="flex gap-1 flex-wrap">
+            {STATUSES.filter((s) => s !== task.status).map((s) => {
+              const colors: Record<string, string> = {
+                "Pending": "text-amber-600 bg-amber-50 hover:bg-amber-100",
+                "In Progress": "text-blue-600 bg-blue-50 hover:bg-blue-100",
+                "Done": "text-emerald-600 bg-emerald-50 hover:bg-emerald-100",
+                "Delayed": "text-red-600 bg-red-50 hover:bg-red-100",
+                "On Hold": "text-orange-600 bg-orange-50 hover:bg-orange-100",
+                "Cancelled": "text-gray-500 bg-gray-100 hover:bg-gray-200",
+              };
+              return (
+                <button key={s} onClick={() => handleStatusClick(s)}
+                  className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg transition ${colors[s] || ""}`}>
+                  {s}
+                </button>
+              );
+            })}
           </div>
         )}
 

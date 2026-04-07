@@ -72,18 +72,15 @@ export default function ProjectDetailPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Group tasks by department — fixed display order
-  const DEPARTMENT_ORDER = [
-    "Purchase","Imports", "Fabrication", "Machine Shop",
-    "Assembly Mechanical", "Assembly Electrical", "Validation", "Dispatch",
-  ];
+  // Group tasks by department
   const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
-  const allDeptNames = Array.from(new Set(tasks.map((t) => t.department_name)));
-  const departments = allDeptNames.sort((a, b) => {
-    const ai = DEPARTMENT_ORDER.findIndex((n) => a.toLowerCase().includes(n.toLowerCase()));
-    const bi = DEPARTMENT_ORDER.findIndex((n) => b.toLowerCase().includes(n.toLowerCase()));
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
+  const getDeptRank = (dept: string) => {
+    const deptTasks = tasks.filter((t) => t.department_name === dept);
+    if (!deptTasks.length) return 4;
+    return Math.min(...deptTasks.map((t) => priorityOrder[t.priority.toLowerCase()] ?? 4));
+  };
+  const departments = Array.from(new Set(tasks.map((t) => t.department_name)))
+    .sort((a, b) => getDeptRank(a) - getDeptRank(b));
   const getDeptTasks = (dept: string) => tasks.filter((t) => t.department_name === dept)
     .sort((a, b) => (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4));
   const getDeptProgress = (dept: string) => {
