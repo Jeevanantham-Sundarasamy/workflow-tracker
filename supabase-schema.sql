@@ -166,6 +166,7 @@ CREATE TABLE machine_type_departments (
   machine_type_id BIGINT NOT NULL REFERENCES machine_types(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
+  priority TEXT DEFAULT 'Medium',
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(machine_type_id, name)
 );

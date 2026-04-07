@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 
 interface DeptWithTasks extends MachineTypeDepartment {
   tasks: MachineTypeTask[];
@@ -241,6 +242,43 @@ export default function MachineTypesPage() {
     }
   };
 
+  // Department priority
+  const updateDeptPriority = async (deptId: string, mtId: string, priority: string) => {
+    const { error } = await supabase.from("machine_type_departments").update({ priority }).eq("id", deptId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? {
+        ...m,
+        departments: m.departments.map((d) => d.id === deptId ? { ...d, priority: priority as MachineTypeDepartment["priority"] } : d),
+      } : m));
+      toast("Priority updated", "success");
+    }
+  };
+
+  // Drag and drop departments
+  const handleDragEnd = async (result: DropResult, mtId: string) => {
+    if (!result.destination) return;
+    const mt = machineTypes.find((m) => m.id === mtId);
+    if (!mt) return;
+    const reordered = Array.from(mt.departments);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    // Update local state immediately
+    setMachineTypes((p) => p.map((m) => m.id === mtId ? { ...m, departments: reordered } : m));
+    // Save new sort_order to Supabase
+    await Promise.all(
+      reordered.map((dept, index) =>
+        supabase.from("machine_type_departments").update({ sort_order: index }).eq("id", dept.id)
+      )
+    );
+    toast("Order saved", "success");
+  };
+
+  const priorityColors: Record<string, { bg: string; text: string }> = {
+    High: { bg: "bg-red-50", text: "text-red-600" },
+    Medium: { bg: "bg-amber-50", text: "text-amber-600" },
+    Low: { bg: "bg-emerald-50", text: "text-emerald-600" },
+  };
+
   return (
     <LoginRequired>
     <div className="flex flex-col min-h-screen">
@@ -315,10 +353,19 @@ export default function MachineTypesPage() {
                   </button>
                   {isOpen && (
                     <div className="border-t border-border p-5 bg-gray-50 space-y-3">
-                      {mt.departments.map((dept) => (
-                        <div key={dept.id} className="bg-white rounded-xl border border-border p-4">
+                      <DragDropContext onDragEnd={(result) => handleDragEnd(result, mt.id)}>
+                        <Droppable droppableId={`depts-${mt.id}`}>
+                          {(provided) => (
+                            <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-3">
+                      {mt.departments.map((dept, deptIndex) => (
+                        <Draggable key={dept.id} draggableId={String(dept.id)} index={deptIndex}>
+                          {(provided, snapshot) => (
+                        <div ref={provided.innerRef} {...provided.draggableProps}
+                          className={`bg-white rounded-xl border border-border p-4 ${snapshot.isDragging ? "shadow-lg ring-2 ring-primary-500/30" : ""}`}>
                           <div className="flex items-center gap-2 mb-2">
-                            <GripVertical className="w-3.5 h-3.5 text-gray-300" />
+                            <span {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing">
+                              <GripVertical className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                            </span>
                             {editingDept === dept.id ? (
                               <div className="flex items-center gap-1.5">
                                 <input type="text" value={editDeptName} onChange={(e) => setEditDeptName(e.target.value)}
@@ -331,6 +378,15 @@ export default function MachineTypesPage() {
                               <>
                                 <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">{dept.name}</h4>
                                 <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{dept.tasks.length} tasks</span>
+                                {/* Department Priority */}
+                                {canEdit ? (
+                                  <select value={dept.priority || "Medium"} onChange={(e) => updateDeptPriority(dept.id, mt.id, e.target.value)}
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer focus:outline-none ${priorityColors[dept.priority || "Medium"]?.bg || "bg-amber-50"} ${priorityColors[dept.priority || "Medium"]?.text || "text-amber-600"}`}>
+                                    <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                                  </select>
+                                ) : dept.priority && (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${priorityColors[dept.priority]?.bg || "bg-amber-50"} ${priorityColors[dept.priority]?.text || "text-amber-600"}`}>{dept.priority}</span>
+                                )}
                                 {canEdit && (
                                   <div className="flex items-center gap-1 ml-auto">
                                     <button onClick={() => { setEditingDept(dept.id); setEditDeptName(dept.name); }}
@@ -396,7 +452,14 @@ export default function MachineTypesPage() {
                             )}
                           </div>
                         </div>
+                          )}
+                        </Draggable>
                       ))}
+                      {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
+                      </DragDropContext>
                       {/* Add department inline */}
                       {canEdit && (
                         addingDeptToType === mt.id ? (

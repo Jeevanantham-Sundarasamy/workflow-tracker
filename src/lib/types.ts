@@ -136,6 +136,7 @@ export interface MachineTypeDepartment {
   machine_type_id: string;
   name: string;
   sort_order: number;
+  priority: "High" | "Medium" | "Low" | null;
 }
 
 export interface MachineTypeTask {
