@@ -56,13 +56,15 @@ export default function MachineTypesPage() {
       const { data: depts } = await supabase.from("machine_type_departments").select("*").order("sort_order");
       const { data: tasks } = await supabase.from("machine_type_tasks").select("*").order("sort_order");
 
+      const pOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
       const result: MachineTypeWithDepts[] = (mts || []).map((mt: MachineType) => {
         const mtDepts = (depts || []).filter((d: MachineTypeDepartment) => d.machine_type_id === mt.id);
         return {
           ...mt,
           departments: mtDepts.map((d: MachineTypeDepartment) => ({
             ...d,
-            tasks: (tasks || []).filter((t: MachineTypeTask) => t.department_id === d.id),
+            tasks: (tasks || []).filter((t: MachineTypeTask) => t.department_id === d.id)
+              .sort((a: MachineTypeTask, b: MachineTypeTask) => (pOrder[a.priority.toLowerCase()] ?? 4) - (pOrder[b.priority.toLowerCase()] ?? 4)),
           })),
         };
       });
@@ -242,6 +244,22 @@ export default function MachineTypesPage() {
     }
   };
 
+  const taskPriorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
+  const updateTaskPriority = async (taskId: string, deptId: string, mtId: string, priority: string) => {
+    const { error } = await supabase.from("machine_type_tasks").update({ priority }).eq("id", taskId);
+    if (!error) {
+      setMachineTypes((p) => p.map((m) => m.id === mtId ? {
+        ...m,
+        departments: m.departments.map((d) => d.id === deptId ? {
+          ...d,
+          tasks: d.tasks.map((t) => t.id === taskId ? { ...t, priority: priority as MachineTypeTask["priority"] } : t)
+            .sort((a: MachineTypeTask, b: MachineTypeTask) => (taskPriorityOrder[a.priority.toLowerCase()] ?? 4) - (taskPriorityOrder[b.priority.toLowerCase()] ?? 4)),
+        } : d),
+      } : m));
+      toast("Priority updated", "success");
+    }
+  };
+
   // Department priority
   const updateDeptPriority = async (deptId: string, mtId: string, priority: string) => {
     const { error } = await supabase.from("machine_type_departments").update({ priority }).eq("id", deptId);
@@ -414,7 +432,14 @@ export default function MachineTypesPage() {
                                 ) : (
                                   <>
                                     <p className="text-xs text-gray-600 flex-1">{i + 1}. {task.name}
-                                      <span className={`ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-gray-400 bg-gray-100" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                                      {canEdit ? (
+                                        <select value={task.priority} onChange={(e) => updateTaskPriority(task.id, dept.id, mt.id, e.target.value)}
+                                          className={`ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer focus:outline-none ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50"}`}>
+                                          <option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>
+                                        </select>
+                                      ) : (
+                                        <span className={`ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded ${task.priority === "High" ? "text-red-600 bg-red-50" : task.priority === "Low" ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50"}`}>{task.priority}</span>
+                                      )}
                                     </p>
                                     {canEdit && (
                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">

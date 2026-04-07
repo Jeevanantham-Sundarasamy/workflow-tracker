@@ -6,7 +6,6 @@ import { useRealtime } from "@/lib/useRealtime";
 import { logActivity, createNotification } from "@/lib/activity";
 import { useAuth } from "@/lib/AuthContext";
 import type { Task } from "@/lib/types";
-import { STATUSES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
@@ -14,7 +13,7 @@ import TaskDetailModal from "@/components/TaskDetailModal";
 import PinModal from "@/components/PinModal";
 import { TaskCardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, Filter, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 export default function TasksPage() {
   const { toast } = useToast();
@@ -75,7 +74,9 @@ export default function TasksPage() {
   const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 };
 
   const filtered = roleFiltered.filter((t) => {
-    if (filterStatus !== "All" && t.status !== filterStatus) return false;
+    if (filterStatus === "All" && t.status === "Done") return false;
+    if (filterStatus === "Completed" && t.status !== "Done") return false;
+    if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -160,10 +161,16 @@ export default function TasksPage() {
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
           </div>
-          <div className="flex items-center gap-1.5"><Filter className="w-3.5 h-3.5 text-gray-400" />
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-              className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
-              <option value="All">All Status</option>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setFilterStatus("All")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterStatus === "All" ? "bg-gray-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              All Tasks
+            </button>
+            <button onClick={() => setFilterStatus("Completed")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterStatus === "Completed" ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600"}`}>
+              Completed
+            </button>
+          </div>
           {!isEmployee && (
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
               className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
