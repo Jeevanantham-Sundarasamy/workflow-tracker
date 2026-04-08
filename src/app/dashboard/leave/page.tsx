@@ -395,6 +395,12 @@ export default function LeavePage() {
                         </button>
                       </>
                     )}
+                    {showApproval && l.status === "Approved" && (
+                      <button onClick={() => openActionModal(l.id, "Rejected")}
+                        className="flex items-center gap-1 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
+                        <XCircle className="w-3 h-3" /> Reject
+                      </button>
+                    )}
                     {showDelete && (
                       <button onClick={() => handleDelete(l.id)}
                         className="text-[10px] font-semibold text-gray-400 hover:text-red-500 transition ml-auto">
