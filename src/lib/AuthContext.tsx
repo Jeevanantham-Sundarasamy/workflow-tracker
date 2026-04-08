@@ -151,15 +151,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data: empData, error: empError } = await supabase
         .from("employees")
-        .select("name, supervisor_name, department")
+        .select("name, supervisor_names, department")
         .eq("pin", pin);
       if (!empError && empData && empData.length > 0) {
         const emp = empData[0];
+        const supNames = emp.supervisor_names ? String(emp.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
         setRole("employee");
         setUserName(emp.name);
-        setSupervisorName(emp.supervisor_name);
+        setSupervisorName(supNames[0] || null);
         setDepartment(emp.department || null);
-        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${emp.supervisor_name || ""}|dept:${emp.department || ""}`);
+        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
         return true;
       }
     } catch {

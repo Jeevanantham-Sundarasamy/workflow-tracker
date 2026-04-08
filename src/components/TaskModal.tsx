@@ -9,7 +9,7 @@ interface TaskModalProps {
   open: boolean;
   task: Task | null;
   supervisors: string[];
-  employees?: { name: string; supervisor_name: string | null }[];
+  employees?: { name: string; supervisor_names: string[] | null }[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -74,8 +74,8 @@ export default function TaskModal({
 
   // Get employees for selected manager/supervisor
   // Show employees under selected person + employees with no supervisor (direct reports to manager)
-  const teamEmployees = employees.filter((e) => e.supervisor_name === form.supervisor);
-  const directReports = employees.filter((e) => !e.supervisor_name);
+  const teamEmployees = employees.filter((e) => e.supervisor_names && e.supervisor_names.includes(form.supervisor));
+  const directReports = employees.filter((e) => !e.supervisor_names || e.supervisor_names.length === 0);
   const filteredEmployees = teamEmployees.length > 0
     ? [...teamEmployees, ...directReports.filter((d) => !teamEmployees.some((t) => t.name === d.name))]
     : directReports;

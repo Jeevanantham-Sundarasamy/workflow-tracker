@@ -26,7 +26,7 @@ export default function DashboardPage() {
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
-  const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
+  const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -53,7 +53,10 @@ export default function DashboardPage() {
       setSupervisorRecords(sr.data || []);
       setEmployeeRecords(er.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
-      setEmployees((er.data || []).map((e: { name: string; supervisor_name: string | null }) => ({ name: e.name, supervisor_name: e.supervisor_name })));
+      setEmployees((er.data || []).map((e: { name: string; supervisor_names: string | null }) => ({
+        name: e.name,
+        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+      })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
     } catch { /* offline */ }
     setLoading(false);
@@ -185,7 +188,7 @@ export default function DashboardPage() {
 
   const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : [...managers, ...supervisors];
   const modalEmployees = isSupervisor && !hasFullAccess
-    ? employees.filter((e) => e.supervisor_name === userName)
+    ? employees.filter((e) => e.supervisor_names && e.supervisor_names.includes(userName!))
     : employees;
 
   return (

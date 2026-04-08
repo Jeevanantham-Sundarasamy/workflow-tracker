@@ -38,7 +38,7 @@ export interface Employee {
   id: string;
   name: string;
   pin: string | null;
-  supervisor_name: string | null;
+  supervisor_names: string[] | null;
   phone: string | null;
   designation: string | null;
   department: string | null;

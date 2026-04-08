@@ -128,11 +128,12 @@ export default function LoginPage() {
     try {
       const { data } = await supabase
         .from("employees")
-        .select("name, supervisor_name, department")
+        .select("name, supervisor_names, department")
         .eq("pin", pinStr);
       if (data && data.length > 0) {
         const emp = data[0];
-        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${emp.supervisor_name || ""}|dept:${emp.department || ""}`);
+        const supNames = emp.supervisor_names ? String(emp.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
+        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
         router.replace("/dashboard/tasks");
         return;
       }

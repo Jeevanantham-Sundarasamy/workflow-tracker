@@ -21,7 +21,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [managers, setManagers] = useState<string[]>([]);
-  const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
+  const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -37,13 +37,16 @@ export default function TasksPage() {
       const [tr, sr, er, mr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
-        supabase.from("employees").select("name, supervisor_name").order("name"),
+        supabase.from("employees").select("name, supervisor_names").order("name"),
         supabase.from("managers").select("name").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
-      setEmployees(er.data || []);
+      setEmployees((er.data || []).map((e: { name: string; supervisor_names: string | null }) => ({
+        name: e.name,
+        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+      })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setConnection("live");
     } catch { setConnection("offline"); }
@@ -133,7 +136,7 @@ export default function TasksPage() {
   const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : [...managers, ...supervisors];
   // For supervisor: only show their team employees
   const modalEmployees = isSupervisor && !hasFullAccess
-    ? employees.filter((e) => e.supervisor_name === userName)
+    ? employees.filter((e) => e.supervisor_names && e.supervisor_names.includes(userName!))
     : employees;
 
   const roleName = userName || (hasFullAccess ? "Admin" : role === "supervisor" ? "Supervisor" : "Employee");

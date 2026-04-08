@@ -38,8 +38,12 @@ export default function CalendarPage() {
 
       // Load team employees for supervisor
       if (isSupervisor && userName) {
-        const { data } = await supabase.from("employees").select("name").eq("supervisor_name", userName);
-        setTeamEmployees((data || []).map((e: { name: string }) => e.name));
+        const { data } = await supabase.from("employees").select("name, supervisor_names");
+        const team = (data || []).filter((e: { name: string; supervisor_names: string | null }) => {
+          if (!e.supervisor_names) return false;
+          return String(e.supervisor_names).split(",").map((n: string) => n.trim()).includes(userName);
+        });
+        setTeamEmployees(team.map((e: { name: string }) => e.name));
       }
     } catch { setConnection("offline"); }
   }, [isSupervisor, userName]);

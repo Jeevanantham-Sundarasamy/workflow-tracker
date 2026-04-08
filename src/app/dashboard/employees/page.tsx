@@ -22,7 +22,7 @@ export default function EmployeesPage() {
   // Add form
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
-  const [newSupervisor, setNewSupervisor] = useState("");
+  const [newSupervisors, setNewSupervisors] = useState<string[]>([]);
   const [newDesignation, setNewDesignation] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
@@ -37,7 +37,7 @@ export default function EmployeesPage() {
   const [editEmpName, setEditEmpName] = useState("");
   const [editEmpDesignation, setEditEmpDesignation] = useState("");
   const [editEmpPhone, setEditEmpPhone] = useState("");
-  const [editEmpSupervisor, setEditEmpSupervisor] = useState("");
+  const [editEmpSupervisors, setEditEmpSupervisors] = useState<string[]>([]);
   const [editEmpDepartment, setEditEmpDepartment] = useState("");
 
   const loadData = useCallback(async () => {
@@ -47,7 +47,10 @@ export default function EmployeesPage() {
         supabase.from("supervisors").select("name").order("name"),
       ]);
       if (er.error) throw er.error;
-      setEmployees(er.data || []);
+      setEmployees((er.data || []).map((e: Record<string, unknown>) => ({
+        ...e,
+        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+      })) as Employee[]);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
     } catch {
       // offline
@@ -59,13 +62,13 @@ export default function EmployeesPage() {
   // Filter: supervisors see only their team
   const filtered = employees.filter((e) => {
     if (isSupervisor && !hasFullAccess) {
-      if (e.supervisor_name !== userName) return false;
+      if (!e.supervisor_names || !e.supervisor_names.includes(userName!)) return false;
     }
     if (search) {
       const q = search.toLowerCase();
       return e.name.toLowerCase().includes(q) ||
         (e.designation || "").toLowerCase().includes(q) ||
-        (e.supervisor_name || "").toLowerCase().includes(q);
+        (e.supervisor_names || []).some((s) => s.toLowerCase().includes(q));
     }
     return true;
   });
@@ -73,23 +76,25 @@ export default function EmployeesPage() {
   const addEmployee = async () => {
     const name = newName.trim();
     if (!name) { toast("Name is required", "error"); return; }
-    const sup = isSupervisor ? userName : newSupervisor;
+    const sups = isSupervisor ? [userName!] : newSupervisors;
     const pin = newPin.trim() || null;
     if (pin) {
       const usedBy = await checkPinUsed(pin);
       if (usedBy) { toast(`PIN already used by ${usedBy}`, "error"); return; }
     }
+    const supervisor_names_str = sups.length > 0 ? sups.join(",") : null;
     const { data, error } = await supabase.from("employees").insert({
       name,
       pin,
-      supervisor_name: sup || null,
+      supervisor_names: supervisor_names_str,
       designation: newDesignation.trim() || null,
       phone: newPhone.trim() || null,
       department: newDepartment.trim() || null,
     }).select().single();
     if (!error && data) {
-      setEmployees((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)));
-      setNewName(""); setNewPin(""); setNewSupervisor(""); setNewDesignation(""); setNewPhone(""); setNewDepartment("");
+      const parsed = { ...data, supervisor_names: data.supervisor_names ? String(data.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null };
+      setEmployees((p) => [...p, parsed].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewName(""); setNewPin(""); setNewSupervisors([]); setNewDesignation(""); setNewPhone(""); setNewDepartment("");
       toast("Employee added", "success");
     } else {
       toast("Failed to add employee", "error");
@@ -125,23 +130,24 @@ export default function EmployeesPage() {
     setEditEmpName(emp.name);
     setEditEmpDesignation(emp.designation || "");
     setEditEmpPhone(emp.phone || "");
-    setEditEmpSupervisor(emp.supervisor_name || "");
+    setEditEmpSupervisors(emp.supervisor_names || []);
     setEditEmpDepartment(emp.department || "");
   };
 
   const updateEmployee = async (id: string) => {
     const name = editEmpName.trim();
     if (!name) { toast("Name is required", "error"); return; }
-    const updates = {
+    const supervisor_names_str = editEmpSupervisors.length > 0 ? editEmpSupervisors.join(",") : null;
+    const dbUpdates = {
       name,
       designation: editEmpDesignation.trim() || null,
       phone: editEmpPhone.trim() || null,
-      supervisor_name: editEmpSupervisor || null,
+      supervisor_names: supervisor_names_str,
       department: editEmpDepartment.trim() || null,
     };
-    const { error } = await supabase.from("employees").update(updates).eq("id", id);
+    const { error } = await supabase.from("employees").update(dbUpdates).eq("id", id);
     if (!error) {
-      setEmployees((p) => p.map((e) => e.id === id ? { ...e, ...updates } : e).sort((a, b) => a.name.localeCompare(b.name)));
+      setEmployees((p) => p.map((e) => e.id === id ? { ...e, name, designation: dbUpdates.designation, phone: dbUpdates.phone, supervisor_names: editEmpSupervisors.length > 0 ? editEmpSupervisors : null, department: dbUpdates.department } : e).sort((a, b) => a.name.localeCompare(b.name)));
       setEditingEmp(null);
       toast("Employee updated", "success");
     } else toast("Failed to update", "error");
@@ -181,12 +187,21 @@ export default function EmployeesPage() {
               <input type="text" value={newPin} onChange={(e) => setNewPin(e.target.value)}
                 placeholder="PIN (for login)" maxLength={6} inputMode="numeric"
                 className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-              {hasFullAccess && (
-                <select value={newSupervisor} onChange={(e) => setNewSupervisor(e.target.value)}
-                  className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
-                  <option value="">Select Supervisor</option>
-                  {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+              {hasFullAccess && supervisors.length > 0 && (
+                <div className="sm:col-span-2">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Reports to Supervisor(s)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {supervisors.map((s) => (
+                      <label key={s} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer transition ${
+                        newSupervisors.includes(s) ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-white text-gray-500 border-border hover:bg-gray-50"
+                      }`}>
+                        <input type="checkbox" className="hidden" checked={newSupervisors.includes(s)}
+                          onChange={(e) => setNewSupervisors(e.target.checked ? [...newSupervisors, s] : newSupervisors.filter((n) => n !== s))} />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               )}
               <input type="text" value={newDesignation} onChange={(e) => setNewDesignation(e.target.value)}
                 placeholder="Designation (optional)"
@@ -228,12 +243,21 @@ export default function EmployeesPage() {
                         <input type="text" value={editEmpDepartment} onChange={(e) => setEditEmpDepartment(e.target.value)}
                           placeholder="Department"
                           className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                        {hasFullAccess && (
-                          <select value={editEmpSupervisor} onChange={(e) => setEditEmpSupervisor(e.target.value)}
-                            className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
-                            <option value="">No Supervisor</option>
-                            {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                        {hasFullAccess && supervisors.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Reports to</p>
+                            <div className="flex flex-wrap gap-1">
+                              {supervisors.map((s) => (
+                                <label key={s} className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border cursor-pointer transition ${
+                                  editEmpSupervisors.includes(s) ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-white text-gray-400 border-border"
+                                }`}>
+                                  <input type="checkbox" className="hidden" checked={editEmpSupervisors.includes(s)}
+                                    onChange={(e) => setEditEmpSupervisors(e.target.checked ? [...editEmpSupervisors, s] : editEmpSupervisors.filter((n) => n !== s))} />
+                                  {s}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -274,10 +298,10 @@ export default function EmployeesPage() {
 
                   {/* Info */}
                   <div className="space-y-1.5 mb-3">
-                    {emp.supervisor_name && (
+                    {emp.supervisor_names && emp.supervisor_names.length > 0 && (
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <Users className="w-3.5 h-3.5" />
-                        <span>Team: <span className="font-semibold text-gray-700">{emp.supervisor_name}</span></span>
+                        <span>Reports to: <span className="font-semibold text-gray-700">{emp.supervisor_names.join(", ")}</span></span>
                       </div>
                     )}
                     {emp.department && (

@@ -38,7 +38,7 @@ export default function TeamPage() {
   const [newDepartment, setNewDepartment] = useState("");
   const [newDesignation, setNewDesignation] = useState("");
   const [newPhone, setNewPhone] = useState("");
-  const [newSupervisor, setNewSupervisor] = useState("");
+  const [newSupervisors, setNewSupervisors] = useState<string[]>([]);
   const [newManagers, setNewManagers] = useState<string[]>([]);
 
   // Edit PIN
@@ -52,7 +52,7 @@ export default function TeamPage() {
   const [editDeptValue, setEditDeptValue] = useState("");
   const [editDesignationValue, setEditDesignationValue] = useState("");
   const [editPhoneValue, setEditPhoneValue] = useState("");
-  const [editSupervisorValue, setEditSupervisorValue] = useState("");
+  const [editSupervisorValues, setEditSupervisorValues] = useState<string[]>([]);
   const [editManagerValues, setEditManagerValues] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
@@ -70,14 +70,17 @@ export default function TeamPage() {
         manager_names: s.manager_names ? s.manager_names.split(",").map((n) => n.trim()).filter(Boolean) : [],
         phone: s.phone || null,
       })));
-      setEmployees(er.data || []);
+      setEmployees((er.data || []).map((e: Record<string, unknown>) => ({
+        ...e,
+        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+      })) as Employee[]);
     } catch { /* offline */ }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const clearForm = () => {
-    setNewName(""); setNewPin(""); setNewDepartment(""); setNewDesignation(""); setNewPhone(""); setNewSupervisor(""); setNewManagers([]);
+    setNewName(""); setNewPin(""); setNewDepartment(""); setNewDesignation(""); setNewPhone(""); setNewSupervisors([]); setNewManagers([]);
   };
 
   // ==================== MANAGERS ====================
@@ -153,11 +156,22 @@ export default function TeamPage() {
     const { error } = await supabase.from("supervisors").update(updates).eq("name", oldName);
     if (!error) {
       if (name !== oldName) {
-        await Promise.all([
-          supabase.from("tasks").update({ supervisor: name }).eq("supervisor", oldName),
-          supabase.from("employees").update({ supervisor_name: name }).eq("supervisor_name", oldName),
-        ]);
+        await supabase.from("tasks").update({ supervisor: name }).eq("supervisor", oldName);
+        // Update employees that have this supervisor in their comma-separated list
+        const { data: empData } = await supabase.from("employees").select("id, supervisor_names").ilike("supervisor_names", `%${oldName}%`);
+        if (empData) {
+          for (const emp of empData) {
+            const names = (emp.supervisor_names || "").split(",").map((n: string) => n.trim()).filter(Boolean);
+            const updated = names.map((n: string) => n === oldName ? name : n).join(",");
+            await supabase.from("employees").update({ supervisor_names: updated }).eq("id", emp.id);
+          }
+        }
         setTasks((p) => p.map((t) => t.supervisor === oldName ? { ...t, supervisor: name } : t));
+        setEmployees((p) => p.map((e) => {
+          if (!e.supervisor_names) return e;
+          const names = e.supervisor_names.map((n) => n === oldName ? name : n);
+          return { ...e, supervisor_names: names };
+        }));
       }
       setSupervisors((p) => p.map((s) => s.name === oldName ? { ...s, name, department, manager_names: editManagerValues, phone } : s).sort((a, b) => a.name.localeCompare(b.name)));
       setEditingItem(null); toast("Updated", "success");
@@ -169,9 +183,10 @@ export default function TeamPage() {
     const name = newName.trim(); if (!name) { toast("Name required", "error"); return; }
     const pin = newPin.trim() || null;
     if (pin) { const usedBy = await checkPinUsed(pin); if (usedBy) { toast(`PIN already used by ${usedBy}`, "error"); return; } }
+    const supervisor_names_str = newSupervisors.length > 0 ? newSupervisors.join(",") : null;
     const { data, error } = await supabase.from("employees").insert({
       name, pin,
-      supervisor_name: newSupervisor || null,
+      supervisor_names: supervisor_names_str,
       designation: newDesignation.trim() || null,
       phone: newPhone.trim() || null,
       department: newDepartment.trim() || null,
@@ -195,15 +210,19 @@ export default function TeamPage() {
 
   const updateEmployee = async (id: string) => {
     const name = editNameValue.trim(); if (!name) { toast("Name required", "error"); return; }
-    const updates = {
+    const supervisor_names_str = editSupervisorValues.length > 0 ? editSupervisorValues.join(",") : null;
+    const dbUpdates = {
       name,
       designation: editDesignationValue.trim() || null,
       phone: editPhoneValue.trim() || null,
-      supervisor_name: editSupervisorValue || null,
+      supervisor_names: supervisor_names_str,
       department: editDeptValue.trim() || null,
     };
-    const { error } = await supabase.from("employees").update(updates).eq("id", id);
-    if (!error) { setEmployees((p) => p.map((e) => e.id === id ? { ...e, ...updates } : e).sort((a, b) => a.name.localeCompare(b.name))); setEditingItem(null); toast("Updated", "success"); }
+    const { error } = await supabase.from("employees").update(dbUpdates).eq("id", id);
+    if (!error) {
+      setEmployees((p) => p.map((e) => e.id === id ? { ...e, name, designation: dbUpdates.designation, phone: dbUpdates.phone, supervisor_names: editSupervisorValues.length > 0 ? editSupervisorValues : null, department: dbUpdates.department } : e).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditingItem(null); toast("Updated", "success");
+    }
   };
 
   const [filterDept, setFilterDept] = useState("All");
@@ -577,16 +596,22 @@ export default function TeamPage() {
                   <input type="text" value={newPin} onChange={(e) => setNewPin(e.target.value)}
                     placeholder="PIN (for login)" maxLength={6} inputMode="numeric"
                     className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                  <select value={newSupervisor} onChange={(e) => setNewSupervisor(e.target.value)}
-                    className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
-                    <option value="">Reports to (optional)</option>
-                    {managers.length > 0 && <optgroup label="Managers">
-                      {managers.map((m) => <option key={`mgr-${m.name}`} value={m.name}>{m.name}</option>)}
-                    </optgroup>}
-                    {supervisors.length > 0 && <optgroup label="Supervisors">
-                      {supervisors.map((s) => <option key={`sup-${s.name}`} value={s.name}>{s.name}</option>)}
-                    </optgroup>}
-                  </select>
+                  {(managers.length > 0 || supervisors.length > 0) && (
+                    <div className="sm:col-span-2">
+                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Reports to Supervisor(s)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {supervisors.map((s) => (
+                          <label key={`sup-${s.name}`} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer transition ${
+                            newSupervisors.includes(s.name) ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-white text-gray-500 border-border hover:bg-gray-50"
+                          }`}>
+                            <input type="checkbox" className="hidden" checked={newSupervisors.includes(s.name)}
+                              onChange={(e) => setNewSupervisors(e.target.checked ? [...newSupervisors, s.name] : newSupervisors.filter((n) => n !== s.name))} />
+                            {s.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <input type="text" value={newDesignation} onChange={(e) => setNewDesignation(e.target.value)}
                     placeholder="Designation (optional)" className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                   <input type="text" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
@@ -617,16 +642,22 @@ export default function TeamPage() {
                               className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                             <input type="text" value={editDeptValue} onChange={(e) => setEditDeptValue(e.target.value)} placeholder="Department"
                               className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
-                            <select value={editSupervisorValue} onChange={(e) => setEditSupervisorValue(e.target.value)}
-                              className="px-3 py-2 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20">
-                              <option value="">No Reporting</option>
-                              {managers.length > 0 && <optgroup label="Managers">
-                                {managers.map((m) => <option key={`mgr-${m.name}`} value={m.name}>{m.name}</option>)}
-                              </optgroup>}
-                              {supervisors.length > 0 && <optgroup label="Supervisors">
-                                {supervisors.map((s) => <option key={`sup-${s.name}`} value={s.name}>{s.name}</option>)}
-                              </optgroup>}
-                            </select>
+                            {supervisors.length > 0 && (
+                              <div className="sm:col-span-2">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Reports to</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {supervisors.map((s) => (
+                                    <label key={`sup-${s.name}`} className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border cursor-pointer transition ${
+                                      editSupervisorValues.includes(s.name) ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-white text-gray-400 border-border"
+                                    }`}>
+                                      <input type="checkbox" className="hidden" checked={editSupervisorValues.includes(s.name)}
+                                        onChange={(e) => setEditSupervisorValues(e.target.checked ? [...editSupervisorValues, s.name] : editSupervisorValues.filter((n) => n !== s.name))} />
+                                      {s.name}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => updateEmployee(emp.id)} className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-lg transition">
@@ -647,7 +678,7 @@ export default function TeamPage() {
                             </div>
                             {hasFullAccess && (
                               <div className="flex items-center gap-1.5">
-                                <button onClick={() => { setEditingItem(`emp-${emp.id}`); setEditNameValue(emp.name); setEditDesignationValue(emp.designation || ""); setEditPhoneValue(emp.phone || ""); setEditSupervisorValue(emp.supervisor_name || ""); setEditDeptValue(emp.department || ""); }}
+                                <button onClick={() => { setEditingItem(`emp-${emp.id}`); setEditNameValue(emp.name); setEditDesignationValue(emp.designation || ""); setEditPhoneValue(emp.phone || ""); setEditSupervisorValues(emp.supervisor_names || []); setEditDeptValue(emp.department || ""); }}
                                   className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
                                   <Pencil className="w-3 h-3" /> Edit</button>
                                 <button onClick={() => removeEmployee(emp.id, emp.name)}
@@ -657,10 +688,10 @@ export default function TeamPage() {
                             )}
                           </div>
                           <div className="space-y-1.5 mb-3">
-                            {emp.supervisor_name && (
+                            {emp.supervisor_names && emp.supervisor_names.length > 0 && (
                               <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <Users className="w-3.5 h-3.5" />
-                                <span>Reports to: <span className="font-semibold text-gray-700">{emp.supervisor_name}</span></span>
+                                <span>Reports to: <span className="font-semibold text-gray-700">{emp.supervisor_names.join(", ")}</span></span>
                               </div>
                             )}
                             {emp.department && <div className="text-xs text-gray-500">Dept: <span className="font-semibold text-gray-700">{emp.department}</span></div>}

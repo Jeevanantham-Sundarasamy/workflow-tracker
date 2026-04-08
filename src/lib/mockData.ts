@@ -22,11 +22,11 @@ const defaultData: Record<string, unknown[]> = {
     { id: generateId(), name: "Anand Raj", pin: "3333", department: "Logistics", created_at: now() },
   ],
   employees: [
-    { id: generateId(), name: "Deepak M", pin: "5555", supervisor_name: "Ravi Kumar", phone: "9876543210", designation: "Field Worker", department: "Maintenance", created_at: now() },
-    { id: generateId(), name: "Suresh P", pin: "5556", supervisor_name: "Ravi Kumar", phone: "9876543211", designation: "Technician", department: "Maintenance", created_at: now() },
-    { id: generateId(), name: "Meena R", pin: "5557", supervisor_name: "Priya Sharma", phone: "9876543212", designation: "Operator", department: "Production", created_at: now() },
-    { id: generateId(), name: "Karthik S", pin: "5558", supervisor_name: "Priya Sharma", phone: "9876543213", designation: "Helper", department: "Production", created_at: now() },
-    { id: generateId(), name: "Gokul V", pin: "5559", supervisor_name: "Anand Raj", phone: "9876543214", designation: "Driver", department: "Logistics", created_at: now() },
+    { id: generateId(), name: "Deepak M", pin: "5555", supervisor_names: "Ravi Kumar", phone: "9876543210", designation: "Field Worker", department: "Maintenance", created_at: now() },
+    { id: generateId(), name: "Suresh P", pin: "5556", supervisor_names: "Ravi Kumar", phone: "9876543211", designation: "Technician", department: "Maintenance", created_at: now() },
+    { id: generateId(), name: "Meena R", pin: "5557", supervisor_names: "Priya Sharma", phone: "9876543212", designation: "Operator", department: "Production", created_at: now() },
+    { id: generateId(), name: "Karthik S", pin: "5558", supervisor_names: "Priya Sharma", phone: "9876543213", designation: "Helper", department: "Production", created_at: now() },
+    { id: generateId(), name: "Gokul V", pin: "5559", supervisor_names: "Anand Raj", phone: "9876543214", designation: "Driver", department: "Logistics", created_at: now() },
   ],
   tasks: [
     { id: generateId(), task: "Install new pipeline at Block A", supervisor: "Ravi Kumar", priority: "High", due_date: "2026-04-05", status: "Pending", follow_up: "Check pressure after install", location: "Block A", location_gps: null, created_by: "Manager", assigned_to: "Deepak M", assigned_to_type: "employee", assigned_by: "Manager", created_at: now() },
