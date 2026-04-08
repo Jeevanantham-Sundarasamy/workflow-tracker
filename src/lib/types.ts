@@ -12,6 +12,7 @@ export interface Task {
   assigned_to: string | null;
   assigned_to_type: "supervisor" | "employee" | null;
   assigned_by: string | null;
+  extra_assignees: string[] | null;
   created_at: string;
 }
 

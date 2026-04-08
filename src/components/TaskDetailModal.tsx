@@ -189,6 +189,11 @@ export default function TaskDetailModal({
                   <MapPin className="w-3 h-3" /> {task.location}
                 </span>
               )}
+              {task.extra_assignees && task.extra_assignees.length > 0 && (
+                <span className="flex items-center gap-1 text-purple-600">
+                  <User className="w-3 h-3" /> +{task.extra_assignees.join(", ")}
+                </span>
+              )}
             </div>
           </div>
           <button

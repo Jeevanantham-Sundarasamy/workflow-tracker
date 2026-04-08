@@ -107,6 +107,12 @@ function TaskCard({
             {task.assigned_to}
           </span>
         )}
+        {task.extra_assignees && task.extra_assignees.length > 0 && (
+          <span className="flex items-center gap-1.5 text-purple-600">
+            <UserCircle className="w-3.5 h-3.5" />
+            +{task.extra_assignees.length} more
+          </span>
+        )}
         {canEdit && onPriorityChange ? (
           <select value={task.priority} onChange={(e) => onPriorityChange(task.id, e.target.value)}
             className={`flex items-center text-xs font-semibold px-2 py-0.5 rounded-lg border border-transparent hover:border-border cursor-pointer focus:outline-none ${priorityStyles[task.priority]}`}>

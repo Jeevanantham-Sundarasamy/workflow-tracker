@@ -1,6 +1,6 @@
 "use client";
 
-import { X, MapPin, Navigation } from "lucide-react";
+import { X, MapPin, Navigation, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
@@ -35,6 +35,7 @@ export default function TaskModal({
     location_gps: "",
     assigned_to: "" as string,
     assigned_to_type: "supervisor" as "supervisor" | "employee",
+    extra_assignees: [] as string[],
   });
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function TaskModal({
         location_gps: task.location_gps || "",
         assigned_to: task.assigned_to || "",
         assigned_to_type: task.assigned_to_type || "supervisor",
+        extra_assignees: task.extra_assignees || [],
       });
     } else {
       setForm({
@@ -63,6 +65,7 @@ export default function TaskModal({
         location_gps: "",
         assigned_to: "",
         assigned_to_type: "supervisor",
+        extra_assignees: [],
       });
     }
   }, [task, open, supervisors]);
@@ -95,6 +98,7 @@ export default function TaskModal({
       assigned_to: form.assigned_to || null,
       assigned_to_type: form.assigned_to ? form.assigned_to_type : null,
       assigned_by: roleName,
+      extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
     });
   };
 
@@ -199,6 +203,42 @@ export default function TaskModal({
               </select>
             </div>
           )}
+
+          {/* Extra Assignees */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Extra People <span className="normal-case text-gray-300">(optional — add more people to this task)</span>
+            </label>
+            {form.extra_assignees.map((person, idx) => (
+              <div key={idx} className="flex gap-2 mb-2">
+                <select
+                  value={person}
+                  onChange={(e) => {
+                    const updated = [...form.extra_assignees];
+                    updated[idx] = e.target.value;
+                    setForm({ ...form, extra_assignees: updated });
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+                >
+                  <option value="">Select person...</option>
+                  {[...supervisors, ...employees.map((e) => e.name)]
+                    .filter((n) => n !== form.supervisor && n !== form.assigned_to && (!form.extra_assignees.includes(n) || n === person))
+                    .map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <button type="button" onClick={() => {
+                  const updated = form.extra_assignees.filter((_, i) => i !== idx);
+                  setForm({ ...form, extra_assignees: updated });
+                }}
+                  className="w-10 h-10 rounded-xl border border-border hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setForm({ ...form, extra_assignees: [...form.extra_assignees, ""] })}
+              className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
+              <Plus className="w-3 h-3" /> Add Person
+            </button>
+          </div>
 
           {/* Row: Due Date + Status */}
           <div className="grid grid-cols-2 gap-3">

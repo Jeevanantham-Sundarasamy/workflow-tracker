@@ -65,6 +65,7 @@ CREATE TABLE tasks (
   assigned_to TEXT,
   assigned_to_type TEXT DEFAULT 'supervisor',
   assigned_by TEXT,
+  extra_assignees TEXT[],
   created_at TIMESTAMP DEFAULT NOW()
 );
 
