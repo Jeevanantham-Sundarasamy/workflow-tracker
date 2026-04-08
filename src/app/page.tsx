@@ -79,65 +79,64 @@ export default function LoginPage() {
     setChecking(true);
     setError(false);
 
-    // Check admin PIN
-    let adminPin = FALLBACK_PIN;
     try {
-      const { data } = await supabase
-        .from("settings")
-        .select("value")
-        .eq("key", "admin_pin")
-        .single();
-      if (data?.value) adminPin = data.value;
-    } catch {}
+      // Check admin PIN
+      let adminPin = FALLBACK_PIN;
+      try {
+        const { data } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", "admin_pin")
+          .single();
+        if (data?.value) adminPin = data.value;
+      } catch {}
 
-    if (pinStr === adminPin) {
-      localStorage.setItem(STORAGE_KEY, "admin");
-      router.replace("/dashboard");
-      return;
-    }
+      if (pinStr === adminPin) {
+        localStorage.setItem(STORAGE_KEY, "admin");
+        router.replace("/dashboard");
+        return;
+      }
 
-    // Check manager PIN
-    try {
-      const { data } = await supabase
+      // Check manager PIN
+      const { data: mgrData } = await supabase
         .from("managers")
         .select("name, department")
         .eq("pin", pinStr);
-      if (data && data.length > 0) {
-        const mgr = data[0];
+      if (mgrData && mgrData.length > 0) {
+        const mgr = mgrData[0];
         localStorage.setItem(STORAGE_KEY, `manager:${mgr.name}|dept:${mgr.department || ""}`);
         router.replace("/dashboard");
         return;
       }
-    } catch {}
 
-    // Check supervisor PIN
-    try {
-      const { data } = await supabase
+      // Check supervisor PIN
+      const { data: supData } = await supabase
         .from("supervisors")
         .select("name, department")
         .eq("pin", pinStr);
-      if (data && data.length > 0) {
-        const sup = data[0];
+      if (supData && supData.length > 0) {
+        const sup = supData[0];
         localStorage.setItem(STORAGE_KEY, `supervisor:${sup.name}|dept:${sup.department || ""}`);
         router.replace("/dashboard/tasks");
         return;
       }
-    } catch {}
 
-    // Check employee PIN
-    try {
-      const { data } = await supabase
+      // Check employee PIN — query all employees and match pin in JS to avoid any DB filter issues
+      const { data: empAll } = await supabase
         .from("employees")
-        .select("name, supervisor_names, department")
-        .eq("pin", pinStr);
-      if (data && data.length > 0) {
-        const emp = data[0];
-        const supNames = emp.supervisor_names ? String(emp.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
-        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
-        router.replace("/dashboard/tasks");
-        return;
+        .select("name, pin, supervisor_name, department");
+      if (empAll && empAll.length > 0) {
+        const emp = empAll.find((e: { pin: string | null }) => e.pin === pinStr);
+        if (emp) {
+          const supNames = emp.supervisor_name ? String(emp.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
+          localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
+          router.replace("/dashboard/tasks");
+          return;
+        }
       }
-    } catch {}
+    } catch (e) {
+      console.error("Login error:", e);
+    }
 
     // No match
     setError(true);

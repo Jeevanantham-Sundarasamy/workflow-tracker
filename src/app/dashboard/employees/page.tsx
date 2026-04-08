@@ -49,7 +49,7 @@ export default function EmployeesPage() {
       if (er.error) throw er.error;
       setEmployees((er.data || []).map((e: Record<string, unknown>) => ({
         ...e,
-        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+        supervisor_names: e.supervisor_name ? String(e.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
       })) as Employee[]);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
     } catch {
@@ -86,13 +86,13 @@ export default function EmployeesPage() {
     const { data, error } = await supabase.from("employees").insert({
       name,
       pin,
-      supervisor_names: supervisor_names_str,
+      supervisor_name: supervisor_names_str,
       designation: newDesignation.trim() || null,
       phone: newPhone.trim() || null,
       department: newDepartment.trim() || null,
     }).select().single();
     if (!error && data) {
-      const parsed = { ...data, supervisor_names: data.supervisor_names ? String(data.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null };
+      const parsed = { ...data, supervisor_names: data.supervisor_name ? String(data.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null };
       setEmployees((p) => [...p, parsed].sort((a, b) => a.name.localeCompare(b.name)));
       setNewName(""); setNewPin(""); setNewSupervisors([]); setNewDesignation(""); setNewPhone(""); setNewDepartment("");
       toast("Employee added", "success");
@@ -142,7 +142,7 @@ export default function EmployeesPage() {
       name,
       designation: editEmpDesignation.trim() || null,
       phone: editEmpPhone.trim() || null,
-      supervisor_names: supervisor_names_str,
+      supervisor_name: supervisor_names_str,
       department: editEmpDepartment.trim() || null,
     };
     const { error } = await supabase.from("employees").update(dbUpdates).eq("id", id);

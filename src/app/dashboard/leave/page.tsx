@@ -62,10 +62,10 @@ export default function LeavePage() {
     // Load team employees for supervisor
     if (isSupervisor && userName) {
       try {
-        const { data } = await supabase.from("employees").select("name, supervisor_names");
-        const team = (data || []).filter((e: { name: string; supervisor_names: string | null }) => {
-          if (!e.supervisor_names) return false;
-          return String(e.supervisor_names).split(",").map((n: string) => n.trim()).includes(userName);
+        const { data } = await supabase.from("employees").select("name, supervisor_name");
+        const team = (data || []).filter((e: { name: string; supervisor_name: string | null }) => {
+          if (!e.supervisor_name) return false;
+          return String(e.supervisor_name).split(",").map((n: string) => n.trim()).includes(userName);
         });
         setTeamEmployees(team.map((e: { name: string }) => e.name));
       } catch { /* ignore */ }

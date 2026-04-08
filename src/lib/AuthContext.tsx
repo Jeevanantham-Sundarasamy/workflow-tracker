@@ -147,21 +147,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // No matching supervisor PIN
     }
 
-    // Check employee PINs
+    // Check employee PINs — fetch all and match in JS to avoid DB filter issues
     try {
-      const { data: empData, error: empError } = await supabase
+      const { data: empAll } = await supabase
         .from("employees")
-        .select("name, supervisor_names, department")
-        .eq("pin", pin);
-      if (!empError && empData && empData.length > 0) {
-        const emp = empData[0];
-        const supNames = emp.supervisor_names ? String(emp.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
-        setRole("employee");
-        setUserName(emp.name);
-        setSupervisorName(supNames[0] || null);
-        setDepartment(emp.department || null);
-        localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
-        return true;
+        .select("name, pin, supervisor_name, department");
+      if (empAll && empAll.length > 0) {
+        const emp = empAll.find((e: { pin: string | null }) => e.pin === pin);
+        if (emp) {
+          const supNames = emp.supervisor_name ? String(emp.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
+          setRole("employee");
+          setUserName(emp.name);
+          setSupervisorName(supNames[0] || null);
+          setDepartment(emp.department || null);
+          localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
+          return true;
+        }
       }
     } catch {
       // No matching employee PIN

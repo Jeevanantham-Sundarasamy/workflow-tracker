@@ -53,9 +53,9 @@ export default function DashboardPage() {
       setSupervisorRecords(sr.data || []);
       setEmployeeRecords(er.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
-      setEmployees((er.data || []).map((e: { name: string; supervisor_names: string | null }) => ({
+      setEmployees((er.data || []).map((e: { name: string; supervisor_name: string | null }) => ({
         name: e.name,
-        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+        supervisor_names: e.supervisor_name ? String(e.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
       })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
     } catch { /* offline */ }

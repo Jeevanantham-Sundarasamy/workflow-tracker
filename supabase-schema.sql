@@ -42,7 +42,7 @@ CREATE TABLE employees (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   name TEXT NOT NULL,
   pin TEXT,
-  supervisor_names TEXT,
+  supervisor_name TEXT,
   phone TEXT,
   designation TEXT,
   department TEXT,

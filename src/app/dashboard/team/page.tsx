@@ -72,7 +72,7 @@ export default function TeamPage() {
       })));
       setEmployees((er.data || []).map((e: Record<string, unknown>) => ({
         ...e,
-        supervisor_names: e.supervisor_names ? String(e.supervisor_names).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
+        supervisor_names: e.supervisor_name ? String(e.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
       })) as Employee[]);
     } catch { /* offline */ }
   }, []);
@@ -158,12 +158,12 @@ export default function TeamPage() {
       if (name !== oldName) {
         await supabase.from("tasks").update({ supervisor: name }).eq("supervisor", oldName);
         // Update employees that have this supervisor in their comma-separated list
-        const { data: empData } = await supabase.from("employees").select("id, supervisor_names").ilike("supervisor_names", `%${oldName}%`);
+        const { data: empData } = await supabase.from("employees").select("id, supervisor_name").ilike("supervisor_name", `%${oldName}%`);
         if (empData) {
           for (const emp of empData) {
-            const names = (emp.supervisor_names || "").split(",").map((n: string) => n.trim()).filter(Boolean);
+            const names = (emp.supervisor_name || "").split(",").map((n: string) => n.trim()).filter(Boolean);
             const updated = names.map((n: string) => n === oldName ? name : n).join(",");
-            await supabase.from("employees").update({ supervisor_names: updated }).eq("id", emp.id);
+            await supabase.from("employees").update({ supervisor_name: updated }).eq("id", emp.id);
           }
         }
         setTasks((p) => p.map((t) => t.supervisor === oldName ? { ...t, supervisor: name } : t));
@@ -186,7 +186,7 @@ export default function TeamPage() {
     const supervisor_names_str = newSupervisors.length > 0 ? newSupervisors.join(",") : null;
     const { data, error } = await supabase.from("employees").insert({
       name, pin,
-      supervisor_names: supervisor_names_str,
+      supervisor_name: supervisor_names_str,
       designation: newDesignation.trim() || null,
       phone: newPhone.trim() || null,
       department: newDepartment.trim() || null,
@@ -215,7 +215,7 @@ export default function TeamPage() {
       name,
       designation: editDesignationValue.trim() || null,
       phone: editPhoneValue.trim() || null,
-      supervisor_names: supervisor_names_str,
+      supervisor_name: supervisor_names_str,
       department: editDeptValue.trim() || null,
     };
     const { error } = await supabase.from("employees").update(dbUpdates).eq("id", id);

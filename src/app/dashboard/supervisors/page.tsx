@@ -102,12 +102,12 @@ export default function SupervisorsPage() {
         await Promise.all([
           supabase.from("tasks").update({ supervisor: newName }).eq("supervisor", oldName),
           (async () => {
-            const { data: empData } = await supabase.from("employees").select("id, supervisor_names").ilike("supervisor_names", `%${oldName}%`);
+            const { data: empData } = await supabase.from("employees").select("id, supervisor_name").ilike("supervisor_name", `%${oldName}%`);
             if (empData) {
               for (const emp of empData) {
-                const names = (emp.supervisor_names || "").split(",").map((n: string) => n.trim()).filter(Boolean);
+                const names = (emp.supervisor_name || "").split(",").map((n: string) => n.trim()).filter(Boolean);
                 const updated = names.map((n: string) => n === oldName ? newName : n).join(",");
-                await supabase.from("employees").update({ supervisor_names: updated }).eq("id", emp.id);
+                await supabase.from("employees").update({ supervisor_name: updated }).eq("id", emp.id);
               }
             }
           })(),
