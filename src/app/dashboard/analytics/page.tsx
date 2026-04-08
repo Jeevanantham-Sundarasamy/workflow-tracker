@@ -22,7 +22,6 @@ export default function AnalyticsPage() {
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [dateFrom, setDateFrom] = useState("");
@@ -30,17 +29,15 @@ export default function AnalyticsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, dr] = await Promise.all([
+      const [tr, sr, er] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
-        supabase.from("machine_type_departments").select("name").order("sort_order"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisorRecords(sr.data || []);
       setEmployeeRecords(er.data || []);
-      setDepartments(Array.from(new Set((dr.data || []).map((d: { name: string }) => d.name))));
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
     } catch { setConnection("offline"); }
   }, []);
@@ -99,7 +96,10 @@ export default function AnalyticsPage() {
   for (const e of employeeRecords) { if (e.department) personDeptMap.set(e.name, e.department); }
   const getTaskDept = (t: Task): string | null =>
     personDeptMap.get(t.supervisor) || (t.assigned_to ? personDeptMap.get(t.assigned_to) : null) || null;
-  const allDepartments = departments;
+  const allDepartments = Array.from(new Set(
+    [...supervisorRecords.map((s) => s.department), ...employeeRecords.map((e) => e.department)]
+      .filter(Boolean) as string[]
+  )).sort();
   const deptChartData = allDepartments.map((dept) => {
     const dt = filtered.filter((t) => getTaskDept(t) === dept);
     return {

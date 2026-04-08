@@ -27,7 +27,6 @@ export default function DashboardPage() {
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -42,12 +41,11 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, mr, dr] = await Promise.all([
+      const [tr, sr, er, mr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
         supabase.from("managers").select("*").order("name"),
-        supabase.from("machine_type_departments").select("name").order("sort_order"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
@@ -57,8 +55,6 @@ export default function DashboardPage() {
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
       setEmployees((er.data || []).map((e: { name: string; supervisor_name: string | null }) => ({ name: e.name, supervisor_name: e.supervisor_name })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
-      const deptNames: string[] = Array.from(new Set((dr.data || []).map((d: { name: string }) => d.name)));
-      setDepartments(deptNames);
     } catch { /* offline */ }
     setLoading(false);
   }, []);
@@ -101,8 +97,11 @@ export default function DashboardPage() {
   const getTaskDept = (t: Task): string | null =>
     personDeptMap.get(t.supervisor) || (t.assigned_to ? personDeptMap.get(t.assigned_to) : null) || null;
 
-  // Use production department names from machine_type_departments
-  const allDepartments = departments;
+  // All unique departments from team (supervisors + employees)
+  const allDepartments = Array.from(new Set(
+    [...supervisorRecords.map((s) => s.department), ...employeeRecords.map((e) => e.department)]
+      .filter(Boolean) as string[]
+  )).sort();
 
   const filtered = roleFiltered.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
