@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRealtime } from "@/lib/useRealtime";
 import { logActivity, createNotification } from "@/lib/activity";
 import { useAuth } from "@/lib/AuthContext";
-import type { Task } from "@/lib/types";
+import type { Task, Supervisor, Employee } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import StatsCards from "@/components/StatsCards";
 import TaskCard from "@/components/TaskCard";
@@ -24,6 +24,8 @@ export default function DashboardPage() {
   const { hasFullAccess, isSupervisor, isEmployee, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
+  const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -32,6 +34,7 @@ export default function DashboardPage() {
   const [filterEmp, setFilterEmp] = useState("All");
   const [managers, setManagers] = useState<string[]>([]);
   const [filterMgr, setFilterMgr] = useState("All");
+  const [filterDept, setFilterDept] = useState("All");
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -41,14 +44,16 @@ export default function DashboardPage() {
       const [tr, sr, er, mr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
-        supabase.from("employees").select("name, supervisor_name").order("name"),
-        supabase.from("managers").select("name").order("name"),
+        supabase.from("employees").select("*").order("name"),
+        supabase.from("managers").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
       setTasks(tr.data || []);
+      setSupervisorRecords(sr.data || []);
+      setEmployeeRecords(er.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
-      setEmployees(er.data || []);
+      setEmployees((er.data || []).map((e: { name: string; supervisor_name: string | null }) => ({ name: e.name, supervisor_name: e.supervisor_name })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
     } catch { /* offline */ }
     setLoading(false);
@@ -83,11 +88,27 @@ export default function DashboardPage() {
     return true;
   });
 
+  // Build a lookup: person name -> department
+  const personDeptMap = new Map<string, string>();
+  for (const s of supervisorRecords) { if (s.department) personDeptMap.set(s.name, s.department); }
+  for (const e of employeeRecords) { if (e.department) personDeptMap.set(e.name, e.department); }
+
+  // Get department for a task (via supervisor or assigned employee)
+  const getTaskDept = (t: Task): string | null =>
+    personDeptMap.get(t.supervisor) || (t.assigned_to ? personDeptMap.get(t.assigned_to) : null) || null;
+
+  // All unique departments
+  const allDepartments = Array.from(new Set(
+    [...supervisorRecords.map((s) => s.department), ...employeeRecords.map((e) => e.department)]
+      .filter(Boolean) as string[]
+  )).sort();
+
   const filtered = roleFiltered.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (filterEmp !== "All" && t.assigned_to !== filterEmp) return false;
     if (filterMgr !== "All" && t.supervisor !== filterMgr) return false;
+    if (filterDept !== "All" && getTaskDept(t) !== filterDept) return false;
     return true;
   });
 
@@ -203,6 +224,13 @@ export default function DashboardPage() {
                         <option value="All">All Employees</option>
                         {employees.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
                       </select>
+                      {allDepartments.length > 0 && (
+                        <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                          <option value="All">All Departments</option>
+                          {allDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      )}
                     </div>
                   )}
                   {hasFullAccess && (
@@ -237,6 +265,51 @@ export default function DashboardPage() {
               <div className="space-y-4"><StatusChart tasks={roleFiltered} /></div>
             </div>
             {hasFullAccess && <SupervisorGrid supervisors={supervisors} tasks={tasks} />}
+
+            {/* Department-wise Task Summary */}
+            {hasFullAccess && allDepartments.length > 0 && (
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Department Overview</h3>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {allDepartments.map((dept) => {
+                    const deptTasks = roleFiltered.filter((t) => getTaskDept(t) === dept);
+                    const pending = deptTasks.filter((t) => t.status === "Pending").length;
+                    const inProgress = deptTasks.filter((t) => t.status === "In Progress").length;
+                    const done = deptTasks.filter((t) => t.status === "Done").length;
+                    const delayed = deptTasks.filter((t) => t.status === "Delayed").length;
+                    const onHold = deptTasks.filter((t) => t.status === "On Hold").length;
+                    const total = deptTasks.length;
+                    return (
+                      <div key={dept} className="bg-white rounded-2xl border border-border p-4 hover:shadow-md transition">
+                        <div className="flex items-center gap-2.5 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                            {dept.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">{dept}</p>
+                            <p className="text-[10px] text-gray-400">{total} task{total !== 1 ? "s" : ""}</p>
+                          </div>
+                        </div>
+                        {total > 0 ? (
+                          <div className="space-y-1.5">
+                            {pending > 0 && <div className="flex items-center gap-2 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-400" /><span>Pending</span><span className="ml-auto font-bold text-gray-700">{pending}</span></div>}
+                            {inProgress > 0 && <div className="flex items-center gap-2 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-blue-400" /><span>In Progress</span><span className="ml-auto font-bold text-gray-700">{inProgress}</span></div>}
+                            {done > 0 && <div className="flex items-center gap-2 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-400" /><span>Done</span><span className="ml-auto font-bold text-gray-700">{done}</span></div>}
+                            {delayed > 0 && <div className="flex items-center gap-2 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400" /><span>Delayed</span><span className="ml-auto font-bold text-gray-700">{delayed}</span></div>}
+                            {onHold > 0 && <div className="flex items-center gap-2 text-xs text-gray-500"><span className="w-2 h-2 rounded-full bg-orange-400" /><span>On Hold</span><span className="ml-auto font-bold text-gray-700">{onHold}</span></div>}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-gray-400">No tasks</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

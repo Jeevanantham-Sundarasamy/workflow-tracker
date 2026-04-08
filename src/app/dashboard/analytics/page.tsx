@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Task } from "@/lib/types";
+import type { Task, Supervisor, Employee } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
@@ -20,6 +20,8 @@ export default function AnalyticsPage() {
   const { hasFullAccess, isSupervisor, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
+  const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [dateFrom, setDateFrom] = useState("");
@@ -27,12 +29,16 @@ export default function AnalyticsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr] = await Promise.all([
+      const [tr, sr, er] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
+        supabase.from("employees").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
-      setTasks(tr.data || []); setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
+      setTasks(tr.data || []);
+      setSupervisorRecords(sr.data || []);
+      setEmployeeRecords(er.data || []);
+      setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
     } catch { setConnection("offline"); }
   }, []);
 
@@ -83,6 +89,27 @@ export default function AnalyticsPage() {
     { name: "Medium", value: filtered.filter((t) => t.priority === "Medium").length, color: "#f59e0b" },
     { name: "Low", value: filtered.filter((t) => t.priority === "Low").length, color: "#94a3b8" },
   ].filter((d) => d.value > 0);
+
+  // Department-wise task data
+  const personDeptMap = new Map<string, string>();
+  for (const s of supervisorRecords) { if (s.department) personDeptMap.set(s.name, s.department); }
+  for (const e of employeeRecords) { if (e.department) personDeptMap.set(e.name, e.department); }
+  const getTaskDept = (t: Task): string | null =>
+    personDeptMap.get(t.supervisor) || (t.assigned_to ? personDeptMap.get(t.assigned_to) : null) || null;
+  const allDepartments = Array.from(new Set(
+    [...supervisorRecords.map((s) => s.department), ...employeeRecords.map((e) => e.department)]
+      .filter(Boolean) as string[]
+  )).sort();
+  const deptChartData = allDepartments.map((dept) => {
+    const dt = filtered.filter((t) => getTaskDept(t) === dept);
+    return {
+      name: dept,
+      Pending: dt.filter((t) => t.status === "Pending").length,
+      "In Progress": dt.filter((t) => t.status === "In Progress").length,
+      Done: dt.filter((t) => t.status === "Done").length,
+      Delayed: dt.filter((t) => t.status === "Delayed").length,
+    };
+  });
 
   return (
     <LoginRequired>
@@ -150,6 +177,41 @@ export default function AnalyticsPage() {
             ) : <p className="text-xs text-gray-400 text-center py-12">No data</p>}
           </div>
         </div>
+
+        {/* Department-wise Work Progress */}
+        {deptChartData.length > 0 && (
+          <div className="bg-white rounded-2xl border border-border p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-5">Department Work Progress</h3>
+            <div className="space-y-4">
+              {deptChartData.map((dept) => {
+                const total = dept.Pending + dept["In Progress"] + dept.Done + dept.Delayed;
+                if (total === 0) return null;
+                return (
+                  <div key={dept.name} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700">{dept.name}</span>
+                      <span className="text-[10px] text-gray-400 font-medium">{total} tasks</span>
+                    </div>
+                    {/* Stacked horizontal bar */}
+                    <div className="flex h-5 rounded-full overflow-hidden bg-gray-100">
+                      {dept.Pending > 0 && <div className="bg-amber-400 transition-all" style={{ width: `${(dept.Pending / total) * 100}%` }} title={`Pending: ${dept.Pending}`} />}
+                      {dept["In Progress"] > 0 && <div className="bg-blue-500 transition-all" style={{ width: `${(dept["In Progress"] / total) * 100}%` }} title={`In Progress: ${dept["In Progress"]}`} />}
+                      {dept.Done > 0 && <div className="bg-emerald-500 transition-all" style={{ width: `${(dept.Done / total) * 100}%` }} title={`Done: ${dept.Done}`} />}
+                      {dept.Delayed > 0 && <div className="bg-red-400 transition-all" style={{ width: `${(dept.Delayed / total) * 100}%` }} title={`Delayed: ${dept.Delayed}`} />}
+                    </div>
+                    {/* Status counts inline */}
+                    <div className="flex gap-3 flex-wrap">
+                      {dept.Pending > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending <b className="text-gray-700">{dept.Pending}</b></span>}
+                      {dept["In Progress"] > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-blue-500" />In Progress <b className="text-gray-700">{dept["In Progress"]}</b></span>}
+                      {dept.Done > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500" />Done <b className="text-gray-700">{dept.Done}</b></span>}
+                      {dept.Delayed > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400" />Delayed <b className="text-gray-700">{dept.Delayed}</b></span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
