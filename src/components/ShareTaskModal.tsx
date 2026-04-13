@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Share2, MessageCircle, Send, Copy, Download, Image as ImageIcon } from "lucide-react";
+import { X, Share2, MessageCircle, Send, Copy, Download, Image as ImageIcon, Clipboard } from "lucide-react";
 import type { Task } from "@/lib/types";
 import { toPng } from "html-to-image";
 
@@ -19,110 +19,227 @@ type Nav = Navigator & {
 export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ kind: "info" | "success" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
-    if (!open) setBusy(false);
+    if (!open) {
+      setBusy(false);
+      setStatus(null);
+    }
   }, [open]);
 
   if (!open || !task) return null;
 
   const text = buildShareText(task);
 
-  const generateFile = async (): Promise<File | null> => {
+  const generateBlob = async (): Promise<Blob | null> => {
     if (!cardRef.current) return null;
-    const dataUrl = await toPng(cardRef.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
+    const dataUrl = await toPng(cardRef.current, {
+      pixelRatio: 2,
+      backgroundColor: "#ffffff",
+      cacheBust: true,
+    });
     const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    return new File([blob], `task-${task.id.slice(0, 8)}.png`, { type: "image/png" });
+    return await res.blob();
   };
 
-  const triggerDownload = (file: File) => {
+  const generateFile = async (): Promise<File | null> => {
+    const blob = await generateBlob();
+    if (!blob) return null;
+    return new File([blob], `task-${String(task.id).slice(0, 8)}.png`, { type: "image/png" });
+  };
+
+  const triggerDownload = (file: File | Blob, name: string) => {
     const url = URL.createObjectURL(file);
     const a = document.createElement("a");
     a.href = url;
-    a.download = file.name;
+    a.download = name;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
-  // Primary action: device share sheet with screenshot attached
+  const tryNativeShareWithFile = async (file: File): Promise<boolean> => {
+    const nav = navigator as Nav;
+    if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: "Task Assigned", text });
+        return true;
+      } catch (err) {
+        const e = err as DOMException;
+        if (e.name === "AbortError") return true; // user cancelled — don't fall back
+        console.warn("share failed", err);
+      }
+    }
+    return false;
+  };
+
+  const tryCopyImageToClipboard = async (blob: Blob): Promise<boolean> => {
+    try {
+      if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
+      const item = new ClipboardItem({ "image/png": blob });
+      await navigator.clipboard.write([item]);
+      return true;
+    } catch (err) {
+      console.warn("clipboard write failed", err);
+      return false;
+    }
+  };
+
+  const handleError = (err: unknown) => {
+    console.error(err);
+    setStatus({
+      kind: "error",
+      msg: `Could not generate screenshot: ${(err as Error).message || "unknown error"}`,
+    });
+  };
+
+  // Primary: device share sheet (mobile = best UX)
   const nativeShare = async () => {
     setBusy(true);
+    setStatus(null);
     try {
       const file = await generateFile();
-      const nav = navigator as Nav;
-      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
-        await nav.share({ files: [file], title: "Task Assigned", text });
-      } else if (nav.share) {
-        await nav.share({ title: "Task Assigned", text });
-      } else if (file) {
-        triggerDownload(file);
-        alert("Screenshot downloaded. Attach it in any chat app.");
+      if (!file) throw new Error("Could not capture screenshot");
+      const shared = await tryNativeShareWithFile(file);
+      if (shared) {
+        setStatus({ kind: "success", msg: "Opened share sheet." });
+      } else {
+        // Desktop fallback: copy to clipboard if possible, otherwise download
+        const copied = await tryCopyImageToClipboard(file);
+        if (copied) {
+          setStatus({ kind: "success", msg: "Image copied. Paste it (Ctrl+V) in any chat app." });
+        } else {
+          triggerDownload(file, file.name);
+          setStatus({ kind: "info", msg: "Screenshot downloaded — attach it in any chat app." });
+        }
       }
     } catch (err) {
-      console.warn(err);
+      handleError(err);
     }
     setBusy(false);
   };
 
-  // WhatsApp: send screenshot image directly when device supports it,
-  // else download PNG and open WhatsApp with task text so user can attach.
+  // WhatsApp: try native share with file → else copy image + open WhatsApp Web → else download + open
   const shareWhatsApp = async () => {
     setBusy(true);
+    setStatus(null);
     try {
       const file = await generateFile();
-      const nav = navigator as Nav;
-      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
-        await nav.share({ files: [file], title: "Task Assigned", text });
+      if (!file) throw new Error("Could not capture screenshot");
+
+      const shared = await tryNativeShareWithFile(file);
+      if (shared) {
+        setStatus({ kind: "success", msg: "Opened share sheet." });
       } else {
-        if (file) triggerDownload(file);
-        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        const copied = await tryCopyImageToClipboard(file);
+        const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
         window.open(url, "_blank");
-        if (file) alert("Screenshot downloaded. In WhatsApp, click the attach (📎) button and select the downloaded image.");
+        if (copied) {
+          setStatus({
+            kind: "success",
+            msg: "Image copied to clipboard. In WhatsApp, pick a chat and press Ctrl+V to paste the screenshot.",
+          });
+        } else {
+          triggerDownload(file, file.name);
+          setStatus({
+            kind: "info",
+            msg: "Screenshot downloaded. In WhatsApp Web, click attach (clip icon) and select the downloaded image.",
+          });
+        }
       }
     } catch (err) {
-      console.warn(err);
+      handleError(err);
     }
     setBusy(false);
   };
 
   const shareTelegram = async () => {
     setBusy(true);
+    setStatus(null);
     try {
       const file = await generateFile();
-      const nav = navigator as Nav;
-      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
-        await nav.share({ files: [file], title: "Task Assigned", text });
+      if (!file) throw new Error("Could not capture screenshot");
+
+      const shared = await tryNativeShareWithFile(file);
+      if (shared) {
+        setStatus({ kind: "success", msg: "Opened share sheet." });
       } else {
-        if (file) triggerDownload(file);
+        const copied = await tryCopyImageToClipboard(file);
         const url = `https://t.me/share/url?url=${encodeURIComponent("Task Assigned")}&text=${encodeURIComponent(text)}`;
         window.open(url, "_blank");
-        if (file) alert("Screenshot downloaded. In Telegram, attach the downloaded image.");
+        if (copied) {
+          setStatus({
+            kind: "success",
+            msg: "Image copied. In Telegram, pick a chat and press Ctrl+V to paste.",
+          });
+        } else {
+          triggerDownload(file, file.name);
+          setStatus({
+            kind: "info",
+            msg: "Screenshot downloaded. Attach it in Telegram.",
+          });
+        }
       }
     } catch (err) {
-      console.warn(err);
+      handleError(err);
+    }
+    setBusy(false);
+  };
+
+  const copyImage = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const blob = await generateBlob();
+      if (!blob) throw new Error("Could not capture screenshot");
+      const ok = await tryCopyImageToClipboard(blob);
+      if (ok) {
+        setStatus({ kind: "success", msg: "Image copied. Paste with Ctrl+V in WhatsApp / Telegram / email." });
+      } else {
+        setStatus({ kind: "error", msg: "Your browser does not support copying images. Use Download instead." });
+      }
+    } catch (err) {
+      handleError(err);
     }
     setBusy(false);
   };
 
   const copyText = async () => {
-    await navigator.clipboard.writeText(text);
-    alert("Copied to clipboard");
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus({ kind: "success", msg: "Text copied to clipboard." });
+    } catch (err) {
+      handleError(err);
+    }
   };
 
   const downloadPng = async () => {
     setBusy(true);
+    setStatus(null);
     try {
       const file = await generateFile();
-      if (file) triggerDownload(file);
+      if (!file) throw new Error("Could not capture screenshot");
+      triggerDownload(file, file.name);
+      setStatus({ kind: "success", msg: "Screenshot downloaded." });
     } catch (err) {
-      console.warn(err);
+      handleError(err);
     }
     setBusy(false);
   };
 
   const priorityColor =
     task.priority === "High" ? "#ef4444" : task.priority === "Medium" ? "#f59e0b" : "#10b981";
+
+  const statusColor =
+    status?.kind === "success"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : status?.kind === "error"
+      ? "bg-red-50 text-red-700 border-red-200"
+      : "bg-blue-50 text-blue-700 border-blue-200";
 
   return (
     <div
@@ -226,13 +343,19 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
             </div>
           </div>
 
+          {status && (
+            <div className={`text-xs font-medium px-3 py-2 rounded-xl border ${statusColor}`}>
+              {status.msg}
+            </div>
+          )}
+
           {/* Share buttons */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <button
               disabled={busy}
               onClick={nativeShare}
               className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold transition col-span-2 sm:col-span-3 shadow-sm"
-              title="Opens your device share sheet with the screenshot attached"
+              title="On phone: opens share sheet. On desktop: copies image / downloads."
             >
               <ImageIcon className="w-4 h-4" /> {busy ? "Preparing..." : "Share Screenshot"}
             </button>
@@ -251,6 +374,14 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
               <Send className="w-4 h-4" /> Telegram
             </button>
             <button
+              disabled={busy}
+              onClick={copyImage}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white text-sm font-semibold transition"
+              title="Copy image — paste with Ctrl+V in WhatsApp / Telegram / Email"
+            >
+              <Clipboard className="w-4 h-4" /> Copy Image
+            </button>
+            <button
               onClick={copyText}
               className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border text-gray-700 hover:bg-gray-50 text-sm font-semibold transition"
             >
@@ -259,15 +390,15 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
             <button
               disabled={busy}
               onClick={downloadPng}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border text-gray-700 hover:bg-gray-50 disabled:opacity-50 text-sm font-semibold transition col-span-2 sm:col-span-3"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border text-gray-700 hover:bg-gray-50 disabled:opacity-50 text-sm font-semibold transition col-span-2"
             >
               <Download className="w-4 h-4" /> Download PNG
             </button>
           </div>
 
           <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-            On phone: &quot;WhatsApp&quot; sends the screenshot directly.
-            On desktop: image is downloaded and WhatsApp Web opens — just attach the image.
+            <strong>Phone:</strong> tap WhatsApp/Telegram → share sheet appears with image.<br />
+            <strong>Desktop:</strong> tap Copy Image, then paste (Ctrl+V) in WhatsApp Web / Telegram Web.
           </p>
         </div>
       </div>
