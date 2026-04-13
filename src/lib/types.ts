@@ -14,7 +14,7 @@ export interface Task {
   assigned_by: string | null;
   extra_assignees: string[] | null;
   created_at: string;
-  completed_at: string | null;
+  completed_at?: string | null;
 }
 
 export interface Supervisor {
