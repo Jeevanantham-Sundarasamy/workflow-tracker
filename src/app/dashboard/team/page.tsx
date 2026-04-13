@@ -8,7 +8,7 @@ import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
-import { Plus, Trash2, Users, Key, Eye, EyeOff, Search, Pencil, Check, X, Briefcase, User, UserCircle } from "lucide-react";
+import { Plus, Trash2, Users, Key, Eye, EyeOff, Search, Pencil, Check, X, Briefcase, User, UserCircle, FileSpreadsheet } from "lucide-react";
 import LoginRequired from "@/components/LoginRequired";
 import { checkPinUsed } from "@/lib/pinUtils";
 
@@ -252,6 +252,69 @@ export default function TeamPage() {
     return true;
   });
 
+  // Export current tab to Excel-compatible CSV
+  const exportToExcel = () => {
+    const csvEscape = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const toCsv = (rows: (string | number | null)[][]) =>
+      rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+
+    let filename = "team.csv";
+    let csv = "";
+    if (tab === "supervisors") {
+      const headers = ["Name", "Department", "Phone", "PIN", "Reports To (Managers)", "Tasks Assigned"];
+      const body = filteredSupervisors.map((s) => [
+        s.name,
+        s.department || "",
+        s.phone || "",
+        s.pin || "",
+        s.manager_names.join("; "),
+        tasks.filter((t) => t.supervisor === s.name).length,
+      ]);
+      csv = toCsv([headers, ...body]);
+      filename = `supervisors-${new Date().toISOString().slice(0, 10)}.csv`;
+    } else if (tab === "employees") {
+      const headers = ["Name", "Designation", "Department", "Phone", "PIN", "Reports To (Supervisors)", "Tasks Assigned"];
+      const body = filteredEmployees.map((e) => [
+        e.name,
+        e.designation || "",
+        e.department || "",
+        e.phone || "",
+        e.pin || "",
+        (e.supervisor_names || []).join("; "),
+        tasks.filter((t) => t.assigned_to === e.name).length,
+      ]);
+      csv = toCsv([headers, ...body]);
+      filename = `employees-${new Date().toISOString().slice(0, 10)}.csv`;
+    } else {
+      const headers = ["Name", "Department", "Phone", "PIN", "Tasks Created"];
+      const body = filteredManagers.map((m) => [
+        m.name,
+        m.department || "",
+        m.phone || "",
+        m.pin || "",
+        tasks.filter((t) => t.created_by === m.name).length,
+      ]);
+      csv = toCsv([headers, ...body]);
+      filename = `managers-${new Date().toISOString().slice(0, 10)}.csv`;
+    }
+    // BOM so Excel auto-detects UTF-8
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+    toast(`Exported ${filename}`, "success");
+  };
+
   // Group by department helper
   const groupByDept = <T extends { department?: string | null }>(items: T[]) => {
     const groups: Record<string, T[]> = {};
@@ -345,6 +408,13 @@ export default function TeamPage() {
               <option value="All">All Departments</option>
               {allDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
+          )}
+          {hasFullAccess && (tab === "supervisors" || tab === "employees") && (
+            <button onClick={exportToExcel}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition shadow-sm"
+              title="Download visible rows as Excel-compatible CSV">
+              <FileSpreadsheet className="w-4 h-4" /> Export Excel
+            </button>
           )}
         </div>
 
