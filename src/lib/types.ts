@@ -17,6 +17,13 @@ export interface Task {
   completed_at?: string | null;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  machine_number: string | null;
+  created_at: string;
+}
+
 export interface Supervisor {
   id: string;
   name: string;

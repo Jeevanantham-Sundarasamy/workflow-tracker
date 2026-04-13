@@ -10,6 +10,7 @@ import Topbar from "@/components/Topbar";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
 import TaskDetailModal from "@/components/TaskDetailModal";
+import ShareTaskModal from "@/components/ShareTaskModal";
 import PinModal from "@/components/PinModal";
 import { TaskCardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
@@ -33,6 +34,7 @@ export default function TasksPage() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [shareTask, setShareTask] = useState<Task | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -143,7 +145,8 @@ export default function TasksPage() {
       const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
       if (!error && created) { setTasks((p) => [created, ...p]); toast("Task created", "success");
         await logActivity(created.id, "created", `Created "${data.task}"`, actor);
-        await createNotification(`New task "${data.task}" → ${data.supervisor}`, "success", created.id); }
+        await createNotification(`New task "${data.task}" → ${data.supervisor}`, "success", created.id);
+        setShareTask(created); }
       else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
     }
     setTaskModalOpen(false); setEditingTask(null);
@@ -223,7 +226,8 @@ export default function TasksPage() {
                 onPriorityChange={canEditTask ? handlePriorityChange : undefined}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}
-                onViewDetail={(task) => setDetailTask(task)} />
+                onViewDetail={(task) => setDetailTask(task)}
+                onShare={(task) => setShareTask(task)} />
             )) : (
               <div className="bg-white rounded-2xl border border-border p-16 text-center">
                 <p className="text-4xl mb-3">📭</p><p className="text-sm text-gray-400 font-medium">No tasks found</p></div>
@@ -234,6 +238,7 @@ export default function TasksPage() {
         employees={modalEmployees} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
+      <ShareTaskModal open={!!shareTask} task={shareTask} onClose={() => setShareTask(null)} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
         onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>

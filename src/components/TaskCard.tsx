@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X } from "lucide-react";
+import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X, Share2 } from "lucide-react";
 import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
@@ -15,6 +15,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
   onViewDetail?: (task: Task) => void;
+  onShare?: (task: Task) => void;
 }
 
 const statusStyles: Record<string, string> = {
@@ -42,6 +43,7 @@ function TaskCard({
   onEdit,
   onDelete,
   onViewDetail,
+  onShare,
 }: TaskCardProps) {
   const today = new Date().toISOString().split("T")[0];
   const isOverdue = task.status !== "Done" && task.status !== "Cancelled" && task.due_date < today;
@@ -171,6 +173,12 @@ function TaskCard({
             <button onClick={() => onViewDetail(task)}
               className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition">
               <Eye className="w-3 h-3" /> Detail
+            </button>
+          )}
+          {onShare && (
+            <button onClick={() => onShare(task)}
+              className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition">
+              <Share2 className="w-3 h-3" /> Share
             </button>
           )}
           {canEdit && (
