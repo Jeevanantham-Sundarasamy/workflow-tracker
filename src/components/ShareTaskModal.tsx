@@ -11,6 +11,11 @@ interface ShareTaskModalProps {
   onClose: () => void;
 }
 
+type Nav = Navigator & {
+  canShare?: (data: { files?: File[] }) => boolean;
+  share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+};
+
 export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
@@ -23,32 +28,36 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
 
   const text = buildShareText(task);
 
-  const generatePng = async (): Promise<Blob | null> => {
+  const generateFile = async (): Promise<File | null> => {
     if (!cardRef.current) return null;
     const dataUrl = await toPng(cardRef.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
     const res = await fetch(dataUrl);
-    return await res.blob();
+    const blob = await res.blob();
+    return new File([blob], `task-${task.id.slice(0, 8)}.png`, { type: "image/png" });
   };
 
+  const triggerDownload = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Primary action: device share sheet with screenshot attached
   const nativeShare = async () => {
     setBusy(true);
     try {
-      const blob = await generatePng();
-      const nav = navigator as Navigator & {
-        canShare?: (data: { files?: File[] }) => boolean;
-        share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
-      };
-      const file = blob ? new File([blob], `task-${task.id.slice(0, 8)}.png`, { type: "image/png" }) : null;
-      const canFiles = !!(file && nav.canShare && nav.canShare({ files: [file] }));
-
-      if (canFiles && file && nav.share) {
+      const file = await generateFile();
+      const nav = navigator as Nav;
+      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
         await nav.share({ files: [file], title: "Task Assigned", text });
       } else if (nav.share) {
         await nav.share({ title: "Task Assigned", text });
-      } else {
-        // fallback: copy to clipboard
-        await navigator.clipboard.writeText(text);
-        alert("Copied task details to clipboard. Paste it into any app.");
+      } else if (file) {
+        triggerDownload(file);
+        alert("Screenshot downloaded. Attach it in any chat app.");
       }
     } catch (err) {
       console.warn(err);
@@ -56,14 +65,44 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
     setBusy(false);
   };
 
-  const shareWhatsApp = () => {
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
+  // WhatsApp: send screenshot image directly when device supports it,
+  // else download PNG and open WhatsApp with task text so user can attach.
+  const shareWhatsApp = async () => {
+    setBusy(true);
+    try {
+      const file = await generateFile();
+      const nav = navigator as Nav;
+      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], title: "Task Assigned", text });
+      } else {
+        if (file) triggerDownload(file);
+        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank");
+        if (file) alert("Screenshot downloaded. In WhatsApp, click the attach (📎) button and select the downloaded image.");
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+    setBusy(false);
   };
 
-  const shareTelegram = () => {
-    const url = `https://t.me/share/url?url=${encodeURIComponent("Task Assigned")}&text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
+  const shareTelegram = async () => {
+    setBusy(true);
+    try {
+      const file = await generateFile();
+      const nav = navigator as Nav;
+      if (file && nav.canShare && nav.canShare({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], title: "Task Assigned", text });
+      } else {
+        if (file) triggerDownload(file);
+        const url = `https://t.me/share/url?url=${encodeURIComponent("Task Assigned")}&text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank");
+        if (file) alert("Screenshot downloaded. In Telegram, attach the downloaded image.");
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+    setBusy(false);
   };
 
   const copyText = async () => {
@@ -74,14 +113,8 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
   const downloadPng = async () => {
     setBusy(true);
     try {
-      const blob = await generatePng();
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `task-${task.id.slice(0, 8)}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const file = await generateFile();
+      if (file) triggerDownload(file);
     } catch (err) {
       console.warn(err);
     }
@@ -198,20 +231,22 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
             <button
               disabled={busy}
               onClick={nativeShare}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold transition col-span-2 sm:col-span-3"
+              className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold transition col-span-2 sm:col-span-3 shadow-sm"
               title="Opens your device share sheet with the screenshot attached"
             >
-              <ImageIcon className="w-4 h-4" /> Share Screenshot
+              <ImageIcon className="w-4 h-4" /> {busy ? "Preparing..." : "Share Screenshot"}
             </button>
             <button
+              disabled={busy}
               onClick={shareWhatsApp}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white text-sm font-semibold transition"
             >
               <MessageCircle className="w-4 h-4" /> WhatsApp
             </button>
             <button
+              disabled={busy}
               onClick={shareTelegram}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold transition"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-sm font-semibold transition"
             >
               <Send className="w-4 h-4" /> Telegram
             </button>
@@ -230,8 +265,9 @@ export default function ShareTaskModal({ open, task, onClose }: ShareTaskModalPr
             </button>
           </div>
 
-          <p className="text-[11px] text-gray-400 text-center">
-            Tip: on mobile, &quot;Share Screenshot&quot; opens your phone&apos;s share sheet (WhatsApp, Gmail, Telegram, etc.).
+          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+            On phone: &quot;WhatsApp&quot; sends the screenshot directly.
+            On desktop: image is downloaded and WhatsApp Web opens — just attach the image.
           </p>
         </div>
       </div>
@@ -246,19 +282,20 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+// Plain text fallback (no emojis — some devices show them as broken boxes).
 function buildShareText(t: Task): string {
   const lines: string[] = [];
   lines.push(`*Task Assigned*`);
   lines.push(``);
-  lines.push(`📋 *${t.task}*`);
-  lines.push(`🎯 Priority: ${t.priority}`);
-  if (t.assigned_to) lines.push(`👤 Assigned to: ${t.assigned_to}`);
-  lines.push(`👷 Supervisor: ${t.supervisor}`);
-  lines.push(`📅 Due: ${formatDate(t.due_date)}`);
-  lines.push(`🔖 Status: ${t.status}`);
-  if (t.location) lines.push(`📍 Location: ${t.location}`);
-  if (t.follow_up) lines.push(`📝 Notes: ${t.follow_up}`);
+  lines.push(`*${t.task}*`);
+  lines.push(`Priority: ${t.priority}`);
+  if (t.assigned_to) lines.push(`Assigned to: ${t.assigned_to}`);
+  lines.push(`Supervisor: ${t.supervisor}`);
+  lines.push(`Due: ${formatDate(t.due_date)}`);
+  lines.push(`Status: ${t.status}`);
+  if (t.location) lines.push(`Location: ${t.location}`);
+  if (t.follow_up) lines.push(`Notes: ${t.follow_up}`);
   if (t.extra_assignees && t.extra_assignees.length > 0)
-    lines.push(`👥 Also: ${t.extra_assignees.join(", ")}`);
+    lines.push(`Also: ${t.extra_assignees.join(", ")}`);
   return lines.join("\n");
 }
