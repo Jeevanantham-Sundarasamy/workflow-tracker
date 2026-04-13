@@ -28,6 +28,8 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterSup, setFilterSup] = useState("All");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -82,8 +84,22 @@ export default function TasksPage() {
     if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterStatus === "Completed" && (dateFrom || dateTo)) {
+      const completed = t.completed_at || t.created_at;
+      if (!completed) return false;
+      const d = completed.slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+    }
     return true;
-  }).sort((a, b) => (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4));
+  }).sort((a, b) => {
+    if (filterStatus === "Completed") {
+      const ad = a.completed_at || a.created_at || "";
+      const bd = b.completed_at || b.created_at || "";
+      return bd.localeCompare(ad);
+    }
+    return (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4);
+  });
 
   const canCreateTask = hasFullAccess || isSupervisor;
   const canEditTask = hasFullAccess || isSupervisor;
@@ -97,8 +113,9 @@ export default function TasksPage() {
 
   const handleStatusChange = async (id: string, status: string, comment?: string) => {
     const task = tasks.find((t) => t.id === id);
-    setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"] } : t)));
-    await supabase.from("tasks").update({ status }).eq("id", id);
+    const completed_at = status === "Done" ? new Date().toISOString() : (task?.status === "Done" ? null : task?.completed_at ?? null);
+    setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: status as Task["status"], completed_at } : t)));
+    await supabase.from("tasks").update({ status, completed_at }).eq("id", id);
     toast("Status updated", "success");
     const actor = userName || (hasFullAccess ? "Manager" : "Unknown");
     if (task) {
@@ -178,6 +195,20 @@ export default function TasksPage() {
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
               className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          )}
+          {filterStatus === "Completed" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs font-semibold text-gray-600">From</label>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
+              <label className="text-xs font-semibold text-gray-600">To</label>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+                  className="text-xs font-bold px-3 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition">Clear</button>
+              )}
+            </div>
           )}
           <span className="text-xs text-gray-400 font-medium ml-auto">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
         </div>
