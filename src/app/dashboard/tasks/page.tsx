@@ -86,10 +86,11 @@ export default function TasksPage() {
     if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterStatus === "Completed" && (dateFrom || dateTo)) {
-      const completed = t.completed_at || t.created_at;
-      if (!completed) return false;
-      const d = completed.slice(0, 10);
+    if (dateFrom || dateTo) {
+      const dateField = filterStatus === "Completed"
+        ? (t.completed_at || t.created_at || "")
+        : (t.due_date || "");
+      const d = dateField.slice(0, 10);
       if (dateFrom && d < dateFrom) return false;
       if (dateTo && d > dateTo) return false;
     }
@@ -199,20 +200,18 @@ export default function TasksPage() {
               className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           )}
-          {filterStatus === "Completed" && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <label className="text-xs font-semibold text-gray-600">From</label>
+          <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs font-semibold text-gray-600">{filterStatus === "Completed" ? "Completed From" : "Due From"}</label>
               <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
+                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
               <label className="text-xs font-semibold text-gray-600">To</label>
               <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
+                className="text-xs font-semibold px-2 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(""); setDateTo(""); }}
                   className="text-xs font-bold px-3 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition">Clear</button>
               )}
             </div>
-          )}
           <span className="text-xs text-gray-400 font-medium ml-auto">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
         </div>
         <div className="space-y-3">
