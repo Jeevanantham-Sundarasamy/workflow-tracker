@@ -15,6 +15,7 @@ export interface Task {
   extra_assignees: string[] | null;
   created_at: string;
   completed_at?: string | null;
+  customer_id?: string | null;
 }
 
 export interface Customer {

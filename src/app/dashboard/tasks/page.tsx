@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRealtime } from "@/lib/useRealtime";
 import { logActivity, createNotification } from "@/lib/activity";
 import { useAuth } from "@/lib/AuthContext";
-import type { Task } from "@/lib/types";
+import type { Task, Customer } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
@@ -23,6 +23,7 @@ export default function TasksPage() {
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [managers, setManagers] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -38,11 +39,12 @@ export default function TasksPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, mr] = await Promise.all([
+      const [tr, sr, er, mr, cr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("name, supervisor_name").order("name"),
         supabase.from("managers").select("name").order("name"),
+        supabase.from("customers").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
@@ -52,6 +54,7 @@ export default function TasksPage() {
         supervisor_names: e.supervisor_name ? String(e.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
       })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
+      setCustomers(cr.data || []);
       setConnection("live");
     } catch { setConnection("offline"); }
     setLoading(false);
@@ -234,7 +237,7 @@ export default function TasksPage() {
         </div>
       </div>
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} roleName={roleName}
+        employees={modalEmployees} customers={customers} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <ShareTaskModal open={!!shareTask} task={shareTask} onClose={() => setShareTask(null)} />

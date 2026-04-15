@@ -5,11 +5,14 @@ import { useEffect, useState } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
 
+interface CustomerOption { id: string; name: string; machine_number: string | null; }
+
 interface TaskModalProps {
   open: boolean;
   task: Task | null;
   supervisors: string[];
   employees?: { name: string; supervisor_names: string[] | null }[];
+  customers?: CustomerOption[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -20,6 +23,7 @@ export default function TaskModal({
   task,
   supervisors,
   employees = [],
+  customers = [],
   roleName = "Admin",
   onClose,
   onSave,
@@ -36,6 +40,7 @@ export default function TaskModal({
     assigned_to: "" as string,
     assigned_to_type: "supervisor" as "supervisor" | "employee",
     extra_assignees: [] as string[],
+    customer_id: "" as string,
   });
 
   useEffect(() => {
@@ -52,6 +57,7 @@ export default function TaskModal({
         assigned_to: task.assigned_to || "",
         assigned_to_type: task.assigned_to_type || "supervisor",
         extra_assignees: task.extra_assignees || [],
+        customer_id: task.customer_id || "",
       });
     } else {
       setForm({
@@ -66,6 +72,7 @@ export default function TaskModal({
         assigned_to: "",
         assigned_to_type: "supervisor",
         extra_assignees: [],
+        customer_id: "",
       });
     }
   }, [task, open, supervisors]);
@@ -99,6 +106,7 @@ export default function TaskModal({
       assigned_to_type: form.assigned_to ? form.assigned_to_type : null,
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
+      customer_id: form.customer_id || null,
     });
   };
 
@@ -239,6 +247,35 @@ export default function TaskModal({
               <Plus className="w-3 h-3" /> Add Person
             </button>
           </div>
+
+          {/* Customer + Machine Number */}
+          {customers.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Customer <span className="normal-case text-gray-300">(optional)</span>
+              </label>
+              <select
+                value={form.customer_id}
+                onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+              >
+                <option value="">No customer</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.machine_number ? ` — Machine: ${c.machine_number}` : ""}
+                  </option>
+                ))}
+              </select>
+              {form.customer_id && (() => {
+                const sel = customers.find((c) => c.id === form.customer_id);
+                return sel?.machine_number ? (
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Machine Number: <span className="font-semibold text-gray-800">{sel.machine_number}</span>
+                  </p>
+                ) : null;
+              })()}
+            </div>
+          )}
 
           {/* Row: Due Date + Status */}
           <div className="grid grid-cols-2 gap-3">

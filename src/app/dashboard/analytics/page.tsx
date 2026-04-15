@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Task, Supervisor, Employee } from "@/lib/types";
+import type { Task, Supervisor, Employee, Customer } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
@@ -22,22 +22,26 @@ export default function AnalyticsPage() {
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [filterCustomer, setFilterCustomer] = useState("All");
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er] = await Promise.all([
+      const [tr, sr, er, cr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
+        supabase.from("customers").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisorRecords(sr.data || []);
       setEmployeeRecords(er.data || []);
+      setCustomers(cr.data || []);
       setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
     } catch { setConnection("offline"); }
   }, []);
@@ -54,8 +58,30 @@ export default function AnalyticsPage() {
   const filtered = roleFiltered.filter((t) => {
     if (dateFrom && t.due_date < dateFrom) return false;
     if (dateTo && t.due_date > dateTo) return false;
+    if (filterCustomer !== "All" && t.customer_id !== filterCustomer) return false;
     return true;
   });
+
+  // Per-machine / per-customer progress
+  const machineProgress = customers
+    .map((c) => {
+      const ct = roleFiltered.filter((t) => t.customer_id === c.id);
+      if (ct.length === 0) return null;
+      return {
+        id: c.id,
+        name: c.name,
+        machine: c.machine_number || "—",
+        total: ct.length,
+        pending: ct.filter((t) => t.status === "Pending").length,
+        inProgress: ct.filter((t) => t.status === "In Progress").length,
+        done: ct.filter((t) => t.status === "Done").length,
+        delayed: ct.filter((t) => t.status === "Delayed").length,
+        onHold: ct.filter((t) => t.status === "On Hold").length,
+        cancelled: ct.filter((t) => t.status === "Cancelled").length,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .filter((m) => filterCustomer === "All" || m.id === filterCustomer);
 
   const today = new Date().toISOString().split("T")[0];
   const total = filtered.length;
@@ -122,12 +148,25 @@ export default function AnalyticsPage() {
             <h1 className="text-xl font-bold text-gray-900">Analytics</h1>
             <p className="text-sm text-gray-400">{filtered.length} tasks &middot; {completionPct}% completed &middot; {overdueCount} overdue</p>
           </div>
-          <div className="flex items-center gap-2 bg-white rounded-xl border border-border p-2">
-            <CalendarDays className="w-4 h-4 text-gray-400 ml-1" />
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="text-xs font-medium border-none bg-transparent outline-none text-gray-700" />
-            <span className="text-xs text-gray-400">to</span>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="text-xs font-medium border-none bg-transparent outline-none text-gray-700" />
-            {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded">Clear</button>}
+          <div className="flex items-center gap-2 flex-wrap">
+            {customers.length > 0 && (
+              <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
+                className="text-xs font-semibold px-3 py-2 rounded-xl border border-border bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+                <option value="All">All Customers / Machines</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="flex items-center gap-2 bg-white rounded-xl border border-border p-2">
+              <CalendarDays className="w-4 h-4 text-gray-400 ml-1" />
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="text-xs font-medium border-none bg-transparent outline-none text-gray-700" />
+              <span className="text-xs text-gray-400">to</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="text-xs font-medium border-none bg-transparent outline-none text-gray-700" />
+              {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded">Clear</button>}
+            </div>
           </div>
         </div>
 
@@ -177,6 +216,48 @@ export default function AnalyticsPage() {
             ) : <p className="text-xs text-gray-400 text-center py-12">No data</p>}
           </div>
         </div>
+
+        {/* Machine / Customer Progress */}
+        {machineProgress.length > 0 && (
+          <div className="bg-white rounded-2xl border border-border p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-5">Machine Progress</h3>
+            <div className="space-y-4">
+              {machineProgress.map((m) => {
+                const pct = m.total ? Math.round((m.done / m.total) * 100) : 0;
+                return (
+                  <div key={m.id} className="space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-gray-800">{m.name}</span>
+                        <span className="text-[10px] text-gray-400 font-medium ml-2">Machine: {m.machine}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-medium">{m.total} tasks</span>
+                        <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{pct}% done</span>
+                      </div>
+                    </div>
+                    <div className="flex h-5 rounded-full overflow-hidden bg-gray-100">
+                      {m.pending > 0 && <div className="bg-amber-400" style={{ width: `${(m.pending / m.total) * 100}%` }} title={`Pending: ${m.pending}`} />}
+                      {m.inProgress > 0 && <div className="bg-blue-500" style={{ width: `${(m.inProgress / m.total) * 100}%` }} title={`In Progress: ${m.inProgress}`} />}
+                      {m.done > 0 && <div className="bg-emerald-500" style={{ width: `${(m.done / m.total) * 100}%` }} title={`Done: ${m.done}`} />}
+                      {m.delayed > 0 && <div className="bg-red-400" style={{ width: `${(m.delayed / m.total) * 100}%` }} title={`Delayed: ${m.delayed}`} />}
+                      {m.onHold > 0 && <div className="bg-orange-400" style={{ width: `${(m.onHold / m.total) * 100}%` }} title={`On Hold: ${m.onHold}`} />}
+                      {m.cancelled > 0 && <div className="bg-gray-400" style={{ width: `${(m.cancelled / m.total) * 100}%` }} title={`Cancelled: ${m.cancelled}`} />}
+                    </div>
+                    <div className="flex gap-3 flex-wrap">
+                      {m.pending > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending <b className="text-gray-700">{m.pending}</b></span>}
+                      {m.inProgress > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-blue-500" />In Progress <b className="text-gray-700">{m.inProgress}</b></span>}
+                      {m.done > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500" />Done <b className="text-gray-700">{m.done}</b></span>}
+                      {m.delayed > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400" />Delayed <b className="text-gray-700">{m.delayed}</b></span>}
+                      {m.onHold > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-orange-400" />On Hold <b className="text-gray-700">{m.onHold}</b></span>}
+                      {m.cancelled > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-full bg-gray-400" />Cancelled <b className="text-gray-700">{m.cancelled}</b></span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Department-wise Work Progress */}
         {deptChartData.length > 0 && (

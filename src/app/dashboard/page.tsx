@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRealtime } from "@/lib/useRealtime";
 import { logActivity, createNotification } from "@/lib/activity";
 import { useAuth } from "@/lib/AuthContext";
-import type { Task, Supervisor, Employee } from "@/lib/types";
+import type { Task, Supervisor, Employee, Customer } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import StatsCards from "@/components/StatsCards";
 import TaskCard from "@/components/TaskCard";
@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -41,11 +42,12 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, mr] = await Promise.all([
+      const [tr, sr, er, mr, cr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
         supabase.from("managers").select("*").order("name"),
+        supabase.from("customers").select("*").order("name"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
@@ -58,6 +60,7 @@ export default function DashboardPage() {
         supervisor_names: e.supervisor_name ? String(e.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : null,
       })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
+      setCustomers(cr.data || []);
     } catch { /* offline */ }
     setLoading(false);
   }, []);
@@ -318,7 +321,7 @@ export default function DashboardPage() {
       </div>
 
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} roleName={roleName}
+        employees={modalEmployees} customers={customers} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
