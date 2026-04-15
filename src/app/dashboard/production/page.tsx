@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Project, MachineType, ProjectTask } from "@/lib/types";
+import type { Project, MachineType, ProjectTask, Customer } from "@/lib/types";
 import { PROJECT_STATUSES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
@@ -28,19 +28,21 @@ export default function ProductionPage() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [projects, setProjects] = useState<(Project & { machine_type_name: string; progress: number; total: number; done: number })[]>([]);
   const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ machine_type_id: "", serial_number: "", customer_name: "", start_date: "", due_date: "" });
+  const [form, setForm] = useState({ machine_type_id: "", serial_number: "", customer_id: "", customer_name: "", start_date: "", due_date: "" });
   const [submitting, setSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [pRes, mtRes, ptRes] = await Promise.all([
+      const [pRes, mtRes, ptRes, cRes] = await Promise.all([
         supabase.from("projects").select("*").order("created_at", { ascending: false }),
         supabase.from("machine_types").select("*").order("name"),
         supabase.from("project_tasks").select("id, project_id, status"),
+        supabase.from("customers").select("*").order("name"),
       ]);
       const mts = mtRes.data || [];
       const pts = ptRes.data || [];
@@ -54,6 +56,7 @@ export default function ProductionPage() {
 
       setProjects(projectsWithProgress);
       setMachineTypes(mts);
+      setCustomers(cRes.data || []);
     } catch { /* offline */ }
     setLoading(false);
   }, []);
@@ -127,7 +130,7 @@ export default function ProductionPage() {
 
     toast("Project created!", "success");
     setModalOpen(false);
-    setForm({ machine_type_id: "", serial_number: "", customer_name: "", start_date: "", due_date: "" });
+    setForm({ machine_type_id: "", serial_number: "", customer_id: "", customer_name: "", start_date: "", due_date: "" });
     setSubmitting(false);
     loadData();
   };
@@ -310,16 +313,38 @@ export default function ProductionPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer <span className="text-red-400">*</span></label>
+                    {customers.length === 0 ? (
+                      <p className="text-xs text-gray-500 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                        No customers yet. <Link href="/dashboard/customers" className="text-primary-600 font-semibold hover:underline">Add one first</Link>
+                      </p>
+                    ) : (
+                      <select value={form.customer_id}
+                        onChange={(e) => {
+                          const c = customers.find((cu) => cu.id === e.target.value);
+                          setForm({
+                            ...form,
+                            customer_id: e.target.value,
+                            customer_name: c?.name || "",
+                            serial_number: c?.machine_number || form.serial_number,
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+                        <option value="">Select customer</option>
+                        {customers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Serial / Machine Number <span className="text-red-400">*</span></label>
                     <input type="text" value={form.serial_number} onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
                       placeholder="e.g. SN-2024-001"
                       className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer Name <span className="text-red-400">*</span></label>
-                    <input type="text" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                      placeholder="Customer company name"
-                      className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                    <p className="text-[10px] text-gray-400 mt-1">Auto-filled from customer machine number — you can override.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
