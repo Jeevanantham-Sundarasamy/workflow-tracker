@@ -29,6 +29,7 @@ export default function TasksPage() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterSup, setFilterSup] = useState("All");
+  const [filterCustomer, setFilterCustomer] = useState("All");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -88,6 +89,7 @@ export default function TasksPage() {
     if (filterStatus === "Completed" && t.status !== "Done") return false;
     if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
+    if (filterCustomer !== "All" && t.customer_id !== filterCustomer) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
       const dateField = filterStatus === "Completed"
@@ -202,6 +204,17 @@ export default function TasksPage() {
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
               className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          )}
+          {customers.length > 0 && (
+            <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
+              className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              <option value="All">All Customers / Machines</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
+                </option>
+              ))}
+            </select>
           )}
           <div className="flex items-center gap-2 flex-wrap">
               <label className="text-xs font-semibold text-gray-600">{filterStatus === "Completed" ? "Completed From" : "Due From"}</label>

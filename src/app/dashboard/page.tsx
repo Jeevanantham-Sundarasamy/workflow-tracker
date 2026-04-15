@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [managers, setManagers] = useState<string[]>([]);
   const [filterMgr, setFilterMgr] = useState("All");
   const [filterDept, setFilterDept] = useState("All");
+  const [filterCustomer, setFilterCustomer] = useState("All");
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -87,12 +88,18 @@ export default function DashboardPage() {
   }, [loadData]);
 
   // Role-based filtering
-  const roleFiltered = tasks.filter((t) => {
+  const roleFilteredAll = tasks.filter((t) => {
     if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName;
     if (isEmployee) return t.assigned_to === userName;
     return true;
   });
+
+  // Apply customer scope to EVERYTHING below (stats, charts, dept progress, task list).
+  // When a customer is selected, the dashboard shows only that machine's data.
+  const roleFiltered = filterCustomer === "All"
+    ? roleFilteredAll
+    : roleFilteredAll.filter((t) => t.customer_id === filterCustomer);
 
   // Build a lookup: person name -> department
   const personDeptMap = new Map<string, string>();
@@ -115,6 +122,7 @@ export default function DashboardPage() {
     if (filterEmp !== "All" && t.assigned_to !== filterEmp) return false;
     if (filterMgr !== "All" && t.supervisor !== filterMgr) return false;
     if (filterDept !== "All" && getTaskDept(t) !== filterDept) return false;
+    // customer filter is already applied above (affects whole dashboard scope)
     return true;
   });
 
@@ -210,35 +218,49 @@ export default function DashboardPage() {
                     {isEmployee ? "My Tasks" : isSupervisor && !hasFullAccess ? "Team Tasks" : "Tasks"}
                     <span className="text-gray-400 font-medium ml-2 text-sm">({filtered.length})</span>
                   </h2>
-                  {hasFullAccess && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Filter className="w-3.5 h-3.5 text-gray-400" />
-                      {managers.length > 0 && (
-                        <select value={filterMgr} onChange={(e) => setFilterMgr(e.target.value)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
-                          <option value="All">All Managers</option>
-                          {managers.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Filter className="w-3.5 h-3.5 text-gray-400" />
+                    {hasFullAccess && managers.length > 0 && (
+                      <select value={filterMgr} onChange={(e) => setFilterMgr(e.target.value)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                        <option value="All">All Managers</option>
+                        {managers.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    )}
+                    {hasFullAccess && (
                       <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
                         className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
                         <option value="All">All Supervisors</option>
                         {supervisors.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
+                    )}
+                    {hasFullAccess && (
                       <select value={filterEmp} onChange={(e) => setFilterEmp(e.target.value)}
                         className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
                         <option value="All">All Employees</option>
                         {employees.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
                       </select>
-                      {allDepartments.length > 0 && (
-                        <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
-                          <option value="All">All Departments</option>
-                          {allDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {hasFullAccess && allDepartments.length > 0 && (
+                      <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                        <option value="All">All Departments</option>
+                        {allDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    )}
+                    {/* Customer filter available to everyone (supervisors & employees see only their own tasks scoped to the selected customer) */}
+                    {customers.length > 0 && (
+                      <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
+                        <option value="All">All Customers / Machines</option>
+                        {customers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   {hasFullAccess && (
                     <>
                       <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">

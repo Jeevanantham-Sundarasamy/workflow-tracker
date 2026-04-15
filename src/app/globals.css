@@ -79,6 +79,13 @@ body {
 }
 .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
 
+/* Slide up from bottom (mobile sheets) */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slide-up { animation: slideUp 0.25s ease-out; }
+
 /* Mobile: Add bottom padding for nav */
 @media (max-width: 768px) {
   main {

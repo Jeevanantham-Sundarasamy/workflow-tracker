@@ -23,8 +23,39 @@ export default function Topbar({ onLoginClick }: TopbarProps) {
         />
       </div>
 
-      {/* Mobile brand */}
-      <span className="text-sm font-bold text-gray-900 sm:hidden">WorkFlow</span>
+      {/* Mobile: show user name when logged in, else brand */}
+      <div className="sm:hidden flex items-center gap-2 min-w-0">
+        {isLoggedIn && userName ? (
+          <>
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 ${
+                isAdmin
+                  ? "bg-primary-600"
+                  : isManager
+                  ? "bg-violet-600"
+                  : isSupervisor
+                  ? "bg-emerald-600"
+                  : "bg-blue-600"
+              }`}
+            >
+              {userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-900 leading-tight truncate max-w-[140px]">
+                {userName}
+              </p>
+              <p className="text-[10px] text-gray-400 leading-tight truncate max-w-[140px]">
+                {isAdmin ? "Admin" : isManager ? "Manager" : isSupervisor ? "Supervisor" : "Employee"}
+                {department ? ` · ${department}` : ""}
+              </p>
+            </div>
+          </>
+        ) : isAdmin ? (
+          <span className="text-sm font-bold text-primary-700">Admin</span>
+        ) : (
+          <span className="text-sm font-bold text-gray-900">WorkFlow</span>
+        )}
+      </div>
 
       {/* Right */}
       <div className="flex items-center gap-2 sm:gap-3 ml-4">

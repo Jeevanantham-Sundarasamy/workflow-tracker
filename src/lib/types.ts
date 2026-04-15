@@ -22,6 +22,7 @@ export interface Customer {
   id: string;
   name: string;
   machine_number: string | null;
+  machine_type: string | null;
   created_at: string;
 }
 

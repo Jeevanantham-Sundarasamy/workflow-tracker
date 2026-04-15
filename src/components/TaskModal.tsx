@@ -162,7 +162,7 @@ export default function TaskModal({
           </div>
 
           {/* Row: Supervisor + Priority */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
                 Manager / Supervisor
@@ -278,7 +278,7 @@ export default function TaskModal({
           )}
 
           {/* Row: Due Date + Status */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
                 Due Date
