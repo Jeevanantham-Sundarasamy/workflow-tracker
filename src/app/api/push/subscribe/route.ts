@@ -3,8 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://demdzfziqwepowmlefvt.supabase.co";
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlbWR6ZnppcXdlcG93bWxlZnZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTk5NDQsImV4cCI6MjA5MDU5NTk0NH0.g8XGmcUF-7c2fyK3xOS8jcSyQsWoTmu8nKIBPu690MY";
 
 export async function POST(req: Request) {
   const { userName, subscription, userAgent } = (await req.json()) as {
