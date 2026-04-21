@@ -42,6 +42,8 @@ export default function TaskModal({
     extra_assignees: [] as string[],
     customer_id: "" as string,
   });
+  // Extra task lines — when creating, each one becomes its own task row (same assignees)
+  const [extraTasks, setExtraTasks] = useState<string[]>([]);
 
   useEffect(() => {
     if (task) {
@@ -59,6 +61,7 @@ export default function TaskModal({
         extra_assignees: task.extra_assignees || [],
         customer_id: task.customer_id || "",
       });
+      setExtraTasks([]);
     } else {
       setForm({
         task: "",
@@ -74,6 +77,7 @@ export default function TaskModal({
         extra_assignees: [],
         customer_id: "",
       });
+      setExtraTasks([]);
     }
   }, [task, open, supervisors]);
 
@@ -96,7 +100,7 @@ export default function TaskModal({
       alert("Please select a supervisor to assign the task.");
       return;
     }
-    onSave({
+    const basePayload = {
       ...form,
       follow_up: form.follow_up || null,
       location: form.location || null,
@@ -107,7 +111,18 @@ export default function TaskModal({
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
       customer_id: form.customer_id || null,
-    });
+    };
+
+    // When editing, save just the single task. When creating, split into multiple
+    // rows — one per task line (main field + extra lines).
+    if (task) {
+      onSave(basePayload);
+      return;
+    }
+    const allTitles = [form.task, ...extraTasks].map((t) => t.trim()).filter(Boolean);
+    for (const title of allTitles) {
+      onSave({ ...basePayload, task: title });
+    }
   };
 
   const getGPS = () => {
@@ -147,10 +162,11 @@ export default function TaskModal({
 
         {/* Form */}
         <div className="p-6 space-y-4">
-          {/* Task Name */}
+          {/* Task Name(s) */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-              Task Name
+              Task Name{!task && extraTasks.length > 0 ? "s" : ""}
+              {!task && <span className="normal-case text-gray-300 ml-1">(each line becomes a separate task)</span>}
             </label>
             <input
               type="text"
@@ -159,6 +175,37 @@ export default function TaskModal({
               placeholder="What needs to be done?"
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
             />
+            {!task && extraTasks.map((title, idx) => (
+              <div key={idx} className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => {
+                    const updated = [...extraTasks];
+                    updated[idx] = e.target.value;
+                    setExtraTasks(updated);
+                  }}
+                  placeholder={`Task #${idx + 2}`}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setExtraTasks(extraTasks.filter((_, i) => i !== idx))}
+                  className="w-10 h-10 rounded-xl border border-border hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            {!task && (
+              <button
+                type="button"
+                onClick={() => setExtraTasks([...extraTasks, ""])}
+                className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition"
+              >
+                <Plus className="w-3 h-3" /> Add another task
+              </button>
+            )}
           </div>
 
           {/* Row: Supervisor + Priority */}
@@ -360,7 +407,11 @@ export default function TaskModal({
             onClick={handleSubmit}
             className="flex-1 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition shadow-sm"
           >
-            {task ? "Update Task" : "Create Task"}
+            {task
+              ? "Update Task"
+              : extraTasks.filter((t) => t.trim()).length > 0
+                ? `Create ${1 + extraTasks.filter((t) => t.trim()).length} Tasks`
+                : "Create Task"}
           </button>
         </div>
       </div>

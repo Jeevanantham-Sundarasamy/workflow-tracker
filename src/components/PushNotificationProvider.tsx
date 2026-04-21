@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { requestPushPermission, showPushNotification, isPushSupported, getPushPermission } from "@/lib/pushNotification";
+import { subscribeUserToPush } from "@/lib/webPush";
 import { Bell } from "lucide-react";
 
 export default function PushNotificationProvider() {
   const { isLoggedIn, userName, role } = useAuth();
   const [showBanner, setShowBanner] = useState(false);
 
-  // Request permission after login
+  // Request permission + subscribe to web push after login
   useEffect(() => {
     if (!isLoggedIn || !isPushSupported()) return;
     if (getPushPermission() === "default") {
@@ -18,11 +19,16 @@ export default function PushNotificationProvider() {
       const timer = setTimeout(() => setShowBanner(true), 2000);
       return () => clearTimeout(timer);
     }
-  }, [isLoggedIn]);
+    // Already granted — make sure we're subscribed for this user
+    if (getPushPermission() === "granted" && userName) {
+      subscribeUserToPush(userName);
+    }
+  }, [isLoggedIn, userName]);
 
   const handleAllow = async () => {
-    await requestPushPermission();
+    const granted = await requestPushPermission();
     setShowBanner(false);
+    if (granted && userName) await subscribeUserToPush(userName);
   };
 
   // Listen to task changes
@@ -35,23 +41,34 @@ export default function PushNotificationProvider() {
       .channel("push-tasks")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks" },
         (payload: any) => {
-          const newTask = payload.new as { task: string; status: string; assigned_to: string | null; supervisor: string };
-          const oldTask = payload.old as { status?: string; assigned_to?: string | null };
+          const newTask = payload.new as { task: string; status: string; assigned_to: string | null; supervisor: string; extra_assignees: string[] | null };
+          const oldTask = payload.old as { status?: string; assigned_to?: string | null; extra_assignees?: string[] | null };
 
-          // Task assigned to employee
-          if (newTask.assigned_to && newTask.assigned_to !== oldTask.assigned_to && newTask.assigned_to === userName) {
+          const newExtras = newTask.extra_assignees ?? [];
+          const oldExtras = oldTask.extra_assignees ?? [];
+          const iAmPrimaryNow = !!newTask.assigned_to && newTask.assigned_to === userName;
+          const iWasPrimaryBefore = oldTask.assigned_to === userName;
+          const iAmExtraNow = !!userName && newExtras.includes(userName);
+          const iWasExtraBefore = !!userName && oldExtras.includes(userName);
+          const newlyAssigned = (iAmPrimaryNow && !iWasPrimaryBefore) || (iAmExtraNow && !iWasExtraBefore);
+
+          // Task assigned to me (primary or extra)
+          if (newlyAssigned) {
             showPushNotification("Task Assigned to You", {
               body: `"${newTask.task}" has been assigned to you`,
               tag: `task-assign-${payload.new.id}`,
             });
           }
 
-          // Task status changed (notify supervisor)
-          if (newTask.status !== oldTask.status && newTask.supervisor === userName) {
-            showPushNotification("Task Status Updated", {
-              body: `"${newTask.task}" → ${newTask.status}`,
-              tag: `task-status-${payload.new.id}`,
-            });
+          // Task status changed — notify supervisor + primary + extras
+          if (newTask.status !== oldTask.status) {
+            const watchers = [newTask.supervisor, newTask.assigned_to, ...newExtras].filter(Boolean);
+            if (userName && watchers.includes(userName)) {
+              showPushNotification("Task Status Updated", {
+                body: `"${newTask.task}" → ${newTask.status}`,
+                tag: `task-status-${payload.new.id}`,
+              });
+            }
           }
         }
       )

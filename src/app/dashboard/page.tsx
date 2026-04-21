@@ -74,7 +74,10 @@ export default function DashboardPage() {
   }, [loadData, taskModalOpen, detailTask]);
 
   useRealtime("tasks", useCallback((payload) => {
-    if (payload.eventType === "INSERT") setTasks((p) => [payload.new as Task, ...p]);
+    if (payload.eventType === "INSERT") {
+      const nt = payload.new as Task;
+      setTasks((p) => (p.some((x) => x.id === nt.id) ? p : [nt, ...p]));
+    }
     else if (payload.eventType === "UPDATE") setTasks((p) => p.map((t) => (t.id === (payload.new as Task).id ? (payload.new as Task) : t)));
     else if (payload.eventType === "DELETE") setTasks((p) => p.filter((t) => t.id !== (payload.old as { id: string }).id));
   }, []));
@@ -87,11 +90,11 @@ export default function DashboardPage() {
     return () => { window.removeEventListener("offline", off); window.removeEventListener("online", on); };
   }, [loadData]);
 
-  // Role-based filtering
+  // Role-based filtering (includes extra_assignees so multi-assigned tasks show for everyone)
   const roleFilteredAll = tasks.filter((t) => {
     if (hasFullAccess) return true;
-    if (isSupervisor) return t.supervisor === userName;
-    if (isEmployee) return t.assigned_to === userName;
+    if (isSupervisor) return t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!);
+    if (isEmployee) return t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!);
     return true;
   });
 
@@ -118,8 +121,8 @@ export default function DashboardPage() {
 
   const filtered = roleFiltered.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
-    if (filterSup !== "All" && t.supervisor !== filterSup) return false;
-    if (filterEmp !== "All" && t.assigned_to !== filterEmp) return false;
+    if (filterSup !== "All" && t.supervisor !== filterSup && !(t.extra_assignees ?? []).includes(filterSup)) return false;
+    if (filterEmp !== "All" && t.assigned_to !== filterEmp && !(t.extra_assignees ?? []).includes(filterEmp)) return false;
     if (filterMgr !== "All" && t.supervisor !== filterMgr) return false;
     if (filterDept !== "All" && getTaskDept(t) !== filterDept) return false;
     // customer filter is already applied above (affects whole dashboard scope)
@@ -145,7 +148,9 @@ export default function DashboardPage() {
     if (task) {
       const details = comment ? `${task.status} → ${status} | ${comment}` : `${task.status} → ${status}`;
       await logActivity(id, "status_changed", details, roleName);
-      await createNotification(`"${task.task}" status → ${status}`, "info", id);
+      const statusRecipients = [task.supervisor, task.assigned_to, ...(task.extra_assignees ?? [])]
+        .filter((n): n is string => !!n && n !== roleName);
+      await createNotification(`"${task.task}" status → ${status}`, "info", id, statusRecipients);
       if (comment) {
         await supabase.from("comments").insert({ task_id: id, author: roleName, message: `[Status → ${status}] ${comment}` });
       }
@@ -169,9 +174,12 @@ export default function DashboardPage() {
       else toast("Update failed", "error");
     } else {
       const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
-      if (!error && created) { setTasks((p) => [created, ...p]); toast("Task created", "success");
+      if (!error && created) { setTasks((p) => (p.some((x) => x.id === created.id) ? p : [created, ...p])); toast("Task created", "success");
         await logActivity(created.id, "created", `Created "${data.task}"`, roleName);
-        await createNotification(`New task "${data.task}" → ${data.supervisor}`, "success", created.id); }
+        const assigneeList = [data.supervisor, data.assigned_to, ...(data.extra_assignees ?? [])]
+          .filter((n): n is string => !!n && n !== roleName);
+        const label = assigneeList.length > 1 ? assigneeList.join(", ") : (data.assigned_to || data.supervisor);
+        await createNotification(`New task "${data.task}" → ${label}`, "success", created.id, assigneeList); }
       else toast("Creation failed", "error");
     }
     setTaskModalOpen(false); setEditingTask(null);
@@ -279,7 +287,7 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {filtered.length ? filtered.map((t) => (
                     <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask}
-                      canChangeStatus={hasFullAccess || (isSupervisor && t.supervisor === userName) || (isEmployee && t.assigned_to === userName)}
+                      canChangeStatus={hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!)))}
                       onStatusChange={handleStatusChange}
                       onPriorityChange={canEditTask ? handlePriorityChange : undefined}
                       onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}

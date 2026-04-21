@@ -32,6 +32,10 @@ export function showPushNotification(
 ) {
   if (!isPushSupported() || Notification.permission !== "granted") return;
 
+  // If a service worker is controlling the page, let the SW push handler
+  // be the single source of notifications — otherwise the user sees duplicates.
+  if (typeof navigator !== "undefined" && navigator.serviceWorker?.controller) return;
+
   const notification = new Notification(title, {
     body: options?.body,
     icon: options?.icon || "/icon-192.png",
