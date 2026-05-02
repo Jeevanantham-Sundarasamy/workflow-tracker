@@ -229,3 +229,13 @@ export interface PorterBooking {
 
 export const PORTER_STATUSES = ["Draft", "Pending", "Confirmed", "In Transit", "Completed", "Cancelled"] as const;
 export const VEHICLE_TYPES = ["Bike", "Scooter", "3 Wheeler", "4 Wheel Auto", "Truck"] as const;
+
+export interface PorterSupplier {
+  id: string;
+  name: string;
+  contact: string;
+  address: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}

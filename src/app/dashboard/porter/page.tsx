@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import type { PorterBooking } from "@/lib/types";
+import type { PorterBooking, PorterSupplier } from "@/lib/types";
 import { PORTER_STATUSES, VEHICLE_TYPES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
@@ -12,8 +12,8 @@ import { toPng } from "html-to-image";
 import {
   Plus, X, Pencil, Trash2, MapPin, Phone, User,
   Calendar, Clock, Package, ChevronRight, AlertCircle,
-  Truck, Weight, ExternalLink, Copy, Check, MessageCircle, Search,
-  Image as ImageIcon, Download,
+  Truck, Weight, ExternalLink, Copy, Check, MessageCircle,
+  Image as ImageIcon, Download, Settings,
 } from "lucide-react";
 
 type Nav = Navigator & {
@@ -21,73 +21,7 @@ type Nav = Navigator & {
   share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
 };
 
-// ── Supplier Directory ────────────────────────────────────────────────────────
-interface SupplierEntry { name: string; contact: string; address: string; }
-
-const SUPPLIERS: SupplierEntry[] = [
-  { name: "Evergreen Traders", contact: "9894870798, 9342125622", address: "11 Ground floor, Kaleeswara Main Road, Opp. Dass Lodge Canteen, Coimbatore - 641009" },
-  { name: "Pioneer Fasteners", contact: "8754282450, 8870550475", address: "104 Rr Samy Lane, Kaleewara Mill Road, Near Dass Lodge Canteen, Coimbatore - 641009" },
-  { name: "Balaji Bearing", contact: "9363125732, 9600412268, 7598936205", address: "BR Complex, 97, Ranga Konar St, Beside AITUC Office, Kattoor, Ram Nagar, Coimbatore - 641009" },
-  { name: "Auto tools center", contact: "8098766143, 9442637241", address: "19, Kaleeswara Mill Road, Coimbatore - 641009" },
-  { name: "Khams Traders", contact: "9994280690", address: "184, Ranga Konar Street, Kattoor, Coimbatore - 641009" },
-  { name: "Seth Electical", contact: "7708733964", address: "No.49, Somasundaram Mill Road, Coimbatore - 641009" },
-  { name: "KB Enterprises", contact: "0422-2236708", address: "85, Somasundram Mill Road, Coimbatore - 641009" },
-  { name: "Sri Dharshini Enterprices", contact: "9843023516", address: "123/10E Kasthuri Building, Dr. Nanjappa Road, Coimbatore - 641018" },
-  { name: "J vision", contact: "9894607077", address: "8/2, Dhandumariamman Koil Street, Avanashi Road, Coimbatore - 641018" },
-  { name: "The Coimbatore Pneumatics", contact: "9566776306, 9944243601", address: "166-168 Rangakonar Street, Kattoor, Coimbatore - 641009" },
-  { name: "SSB Industrial solution", contact: "8870015036, 9994210135", address: "353-A, 404-408 Marvel Complex, Sanganoor Main Road, Ganapathy - 641006" },
-  { name: "Velthan Steels", contact: "9994609695, 9025960451", address: "393/3B Nalla Thanneer Thottam, Sanganoor Road, Ganapathy - 641006" },
-  { name: "SPB steels", contact: "9364501112, 9363102930", address: "66-B, Sanganoor Road, Ganapathy - 641006" },
-  { name: "Renuka Metals", contact: "9443652795, 9443523204", address: "274/1-A S R Complex, Sanganoor Main Road, Ganapathy, Coimbatore - 641006" },
-  { name: "Pearl metal house", contact: "9952644756", address: "285/1, Nalla Thanneer Thottam, Raja Street, Ganapathy, Coimbatore - 641006" },
-  { name: "Thirumal tools and hardwares", contact: "9786837089, 9750965846", address: "1424, Bharathy Nagar Stop, Sathy Main Road, Ganapathy - 641006" },
-  { name: "Lion tools and hardwares", contact: "9342968187", address: "303, Pionner Tower, Dr. Nanjappa Road, Coimbatore - 641018" },
-  { name: "Velan stores", contact: "9787575793", address: "NO 11/5, Avinashi Road, Thottipalayam Pirivu, Civil Aerodrome Post, Coimbatore - 641014" },
-  { name: "Suriya Hardwares", contact: "9443345427", address: "1/152, Avinashi Road, Chinniyampalayam, Coimbatore - 641048" },
-  { name: "Surya Agency", contact: "9787924186, 9843024186", address: "1072, Sathy Road, Opp. Textool, Ganapathy - 641006" },
-  { name: "MM and Oil Seal", contact: "7397721812", address: "295, V.R. Arcade, 1st Floor, Opp. Corporation Complex, Coimbatore - 641018" },
-  { name: "Meghalai Steels", contact: "6379788411", address: "S.F.No. 10/3A Krishnarayapuram, Ganapathy - 641110" },
-  { name: "Burhani engineering mart", contact: "9894248208", address: "81 Chellappan Gounder Street, Katoor, Coimbatore - 641009" },
-  { name: "Premier Precision Engineering", contact: "9842259052, 9843021296", address: "Site No. 11, Indra Nagar (A.K.G), Near Lion Bus, Uppilipalayam, Coimbatore - 641015" },
-  { name: "Sekar keyway", contact: "9500345127", address: "No-8-A, Kasthuribai 3rd Street, Ganapathy, Coimbatore - 641006" },
-  { name: "Mech Pro Engineering", contact: "9842026002", address: "HIG-1, Avarampalayam, Shoba Nagar, Krishnarayapuram, Illango Nagar, Coimbatore - 641006" },
-  { name: "S P TIG Welding", contact: "9942453330", address: "No:94 Sanganoor Road, Raja Street, Ganapathy, Coimbatore - 641006" },
-  { name: "Sim tech CNC", contact: "8124618161", address: "No.9, Jaganathan Industrial Estate, Athipalayam Road, Chinnavedampatti, Coimbatore - 641049" },
-  { name: "Fusion engineering", contact: "9080956145", address: "124-A, Bharathy Street, Arunachalagounder Thottam, Chinnavedampatti, Coimbatore - 641049" },
-  { name: "Jaya spring", contact: "9443332074", address: "NO. 28, Padel Road, Ram Nagar, Coimbatore - 641009" },
-  { name: "ACM engineering", contact: "9965590091", address: "S.F.No.49/2B1, State Bank Colony Main Road, Subramaniya Nagar, Chinnavedampatti - 641049" },
-  { name: "Lucky Plastics", contact: "8870683863", address: "462-D, Maraikayar Complex, N.H. Road, Townhall, Coimbatore - 641001" },
-  { name: "Veera Steels", contact: "9789167683", address: "SF.NO. 14, Athipalayam Main Road, Chinnavedampatti - 641049" },
-  { name: "Sri Balamurugan Surface Coating", contact: "9842249099, 9842239099", address: "7/10D, Sri Ayyappa Industrial Estate, Keeranatham Village, Kondayampalayam Road, Saravanampatti - 641035" },
-  { name: "SBV enggineering works", contact: "9952260628", address: "2/494-1, Bettathapuram Pudur, Karamadi PO, Coimbatore - 641104" },
-  { name: "SVS Industry", contact: "6381603667", address: "No. 2/285-A Mylampatti, Karayamapalayam, Coimbatore - 641062" },
-  { name: "OM SAI PLATERS", contact: "9443551196, 8124440527", address: "2/240, Gemini Compound, Avinashi Road, Chinniyampalayam, Coimbatore - 641062" },
-  { name: "Sree metal cutting eng industries", contact: "9751044455", address: "573/1B2, Athipalayam Road, Chinnavedampatti, Coimbatore - 641049" },
-  { name: "Aluminium finisher", contact: "9600674796, 9043956626", address: "13/1-3 Athipalayam Road, Chinnavedampatti - 641049" },
-  { name: "Sakthi Agencies", contact: "9842548211", address: "59, 2nd Street, Ganapathy - 641006" },
-  { name: "M.R.Fabricators", contact: "7010787640, 9095716194", address: "145/70 Moolai Thottam, Sakthi Main Road, Ganapathy, Coimbatore - 641006" },
-  { name: "SM Steel & Tubes", contact: "9751549001, 9655649001", address: "SF No.112, 3rd Street, Kandhasamy Nagar, Udhayamapalayam, Coimbatore - 641033" },
-  { name: "Covai edm tools private limited", contact: "9788885555", address: "428/05-A1, Eran Thottam, Opp. BSNL Tower, Ganapathy, Coimbatore - 641006" },
-  { name: "king coats", contact: "8754772968", address: "Near Global Infra Projects Company, Manickampalayam, Kunnathurpudhur, Sarcarsamakulam, Tamil Nadu - 641107" },
-  { name: "Pavithra Air products", contact: "8489910661", address: "513-A/3, Chinnavedampatti, Ganapathy, Coimbatore - 641049" },
-  { name: "OM Sakthi hydralics", contact: "7904631684", address: "NA Thottam, SF No 274/1 55, Sanganoor Main Road, Ganapathy, Coimbatore - 641006" },
-  { name: "Cpl laser tech", contact: "9943743623", address: "439/3B2C Senthampalayam Road, Masagoundenchettipalayam, Annur Village, Coimbatore" },
-  { name: "DURGA BEARING", contact: "9363208810", address: "Chennai" },
-  { name: "ANUSYA GAS AGENCIES", contact: "9994684297", address: "Vinayakar Kovil, 2/14 B-1, Opp. Karayamapalayam Road, Thanam Nagar, GEM Nagar, Mylampatti, Coimbatore - 641048" },
-  { name: "DYNAMIC TRADING", contact: "9989411716", address: "5.124, Ranga Konar St, Kattoor, Anupperpalayam, Ram Nagar, Coimbatore - 641009" },
-  { name: "VS ENGINEERING", contact: "8883645134", address: "7, S Street Number 5, Avarampalayam, Illango Nagar, Coimbatore - 641006" },
-  { name: "SRI MAHAVISHNU HEAT TREATMENT", contact: "9994179899", address: "1435, Sathy Road, Ganapathy Housing Unit, Gopalakrishnapuram, Bharathi Nagar, Coimbatore - 641006" },
-  { name: "sk tools grinding", contact: "9952650507", address: "Shop No.95,96, Sanganoor Road, Raja Street, Sridevi Nagar, Ganapathy, Coimbatore - 641006" },
-  { name: "Premier plastic arts", contact: "9677795977", address: "128, Lakshmi Complex, Sathya Road, Ganapathy, Coimbatore - 641006" },
-  { name: "Raman Transport", contact: "9080833969", address: "Anna Nagar, Neelambur, Coimbatore - 641062" },
-  { name: "Sree Fastners", contact: "7867979936", address: "240, Chellappan Street, Kattoor, Coimbatore - 641009" },
-  { name: "Pinacle Caster", contact: "9035508666", address: "Ground Floor, No. 179, Rangasamy Street, Kattoor, Coimbatore - 641603" },
-  { name: "Sendka Belt And Pully", contact: "8310638451", address: "146/3, 146/3-1 Bharathi Street, Anjugam Nagar, Chinnavedampatti PO, Coimbatore - 641049" },
-  { name: "Pully Center", contact: "7397794481", address: "239, Dr Nanjappa Road, Anupperpalayam, Ram Nagar, Coimbatore - 641009" },
-  { name: "Misumi", contact: "8800986472", address: "Plot No-31, Electronic City, Sec-18, Udyog Vihar Phase-IV, Gurgaon" },
-  { name: "SMC", contact: "9849544290", address: "P-41/3, 8th Avenue, Domestic Tariff Zone, Mahindra World City, Chengalpattu, Tamil Nadu - 603004" },
-  { name: "Sun Electical", contact: "9790418811", address: "Shop No.50-1A, Sathy Road, Athipalayam Pirivu, Prashakthi Nagar, Ganapathy, Coimbatore - 641006" },
-];
+// ── Suppliers are loaded from the database ────────────────────────────────────
 
 // ── Porter App Redirect ───────────────────────────────────────────────────────
 function openPorterApp() {
@@ -133,12 +67,10 @@ const vehicleIcons: Record<string, string> = {
 const STATUS_FLOW = ["Pending", "Confirmed", "In Transit", "Completed"] as const;
 
 const emptyForm = {
-  supplier_name: "",
-  supplier_target: "From" as "From" | "To",
-  receiver_name: "",
-  receiver_target: "To" as "From" | "To",
   materials: [] as string[],
   materialInput: "",
+  from_supplier_id: "",
+  to_supplier_id: "",
   approx_weight: "",
   pickup_location: "",
   drop_location: "",
@@ -152,9 +84,10 @@ const emptyForm = {
 
 export default function PorterPage() {
   const { toast } = useToast();
-  const { hasFullAccess, isSupervisor, isEmployee, userName, role, login } = useAuth();
+  const { hasFullAccess, isSupervisor, isEmployee, userName, role, login, isManager, isAdmin } = useAuth();
 
   const [bookings, setBookings] = useState<PorterBooking[]>([]);
+  const [suppliers, setSuppliers] = useState<PorterSupplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableError, setTableError] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -164,11 +97,33 @@ export default function PorterPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [summaryBooking, setSummaryBooking] = useState<PorterBooking | null>(null);
-  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
-  const [showReceiverDropdown, setShowReceiverDropdown] = useState(false);
   const [isPorterSupervisor, setIsPorterSupervisor] = useState(false);
-  const supplierRef = useRef<HTMLDivElement>(null);
-  const receiverRef = useRef<HTMLDivElement>(null);
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<PorterSupplier | null>(null);
+  const [supplierForm, setSupplierForm] = useState({ name: "", contact: "", address: "" });
+  const [supervisorList, setSupervisorList] = useState<{ id: string; name: string; is_porter_supervisor: boolean }[]>([]);
+  const [fromSupplierSearch, setFromSupplierSearch] = useState("");
+  const [toSupplierSearch, setToSupplierSearch] = useState("");
+  const [fromSupplierOpen, setFromSupplierOpen] = useState(false);
+  const [toSupplierOpen, setToSupplierOpen] = useState(false);
+  const fromSupplierRef = useRef<HTMLDivElement>(null);
+  const toSupplierRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fromSupplierRef.current && !fromSupplierRef.current.contains(e.target as Node)) {
+        setFromSupplierOpen(false);
+      }
+      if (toSupplierRef.current && !toSupplierRef.current.contains(e.target as Node)) {
+        setToSupplierOpen(false);
+      }
+    };
+    if (fromSupplierOpen || toSupplierOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [fromSupplierOpen, toSupplierOpen]);
 
   // Load porter-supervisor flag for current user
   useEffect(() => {
@@ -183,50 +138,111 @@ export default function PorterPage() {
 
   const hasPorterFullAccess = hasFullAccess || isPorterSupervisor;
 
-  // Close supplier/receiver dropdowns on outside click
+  // Load suppliers from database
+  const loadSuppliers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("porter_suppliers")
+        .select("*")
+        .order("name");
+
+      if (error) {
+        console.error("Supabase error:", error);
+        const errMsg = error.message || JSON.stringify(error) || "Unknown error";
+        toast(`Failed to load suppliers: ${errMsg}`, "error");
+        return;
+      }
+
+      console.log("Successfully loaded suppliers:", data?.length || 0);
+      setSuppliers((data as PorterSupplier[]) || []);
+    } catch (err) {
+      console.error("Supplier loading exception:", err);
+      toast(`Error loading suppliers: ${(err as Error).message}`, "error");
+    }
+  }, [toast]);
+
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
-        setShowSupplierDropdown(false);
-      }
-      if (receiverRef.current && !receiverRef.current.contains(e.target as Node)) {
-        setShowReceiverDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+    loadSuppliers();
+  }, [loadSuppliers]);
 
-  const filteredSuppliers = SUPPLIERS.filter((s) =>
-    s.name.toLowerCase().includes(form.supplier_name.toLowerCase())
-  ).slice(0, 8);
+  // Load supervisors for porter access management (managers/admins only)
+  const loadSupervisors = useCallback(async () => {
+    if (!hasFullAccess) return;
+    const { data } = await supabase
+      .from("supervisors")
+      .select("id, name, is_porter_supervisor")
+      .order("name");
+    if (data) setSupervisorList(data as { id: string; name: string; is_porter_supervisor: boolean }[]);
+  }, [hasFullAccess]);
 
-  const filteredReceivers = SUPPLIERS.filter((s) =>
-    s.name.toLowerCase().includes(form.receiver_name.toLowerCase())
-  ).slice(0, 8);
+  useEffect(() => {
+    loadSupervisors();
+  }, [loadSupervisors]);
 
-  const selectSupplier = (s: SupplierEntry) => {
-    setForm((f) => ({
-      ...f,
-      supplier_name: s.name,
-      contact: s.contact,
-      ...(f.supplier_target === "From"
-        ? { pickup_location: s.address }
-        : { drop_location: s.address }),
-    }));
-    setShowSupplierDropdown(false);
+  const togglePorterSupervisor = async (id: string, current: boolean) => {
+    const { error } = await supabase
+      .from("supervisors")
+      .update({ is_porter_supervisor: !current })
+      .eq("id", id);
+    if (error) { toast("Failed to update access", "error"); return; }
+    setSupervisorList((prev) => prev.map((s) => s.id === id ? { ...s, is_porter_supervisor: !current } : s));
+    toast(!current ? "Porter access granted" : "Porter access revoked", "success");
   };
 
-  const selectReceiver = (s: SupplierEntry) => {
-    setForm((f) => ({
-      ...f,
-      receiver_name: s.name,
-      ...(f.receiver_target === "From"
-        ? { pickup_location: s.address }
-        : { drop_location: s.address }),
-    }));
-    setShowReceiverDropdown(false);
+  // Add or update supplier
+  const handleSaveSupplier = async () => {
+    if (!supplierForm.name.trim() || !supplierForm.contact.trim() || !supplierForm.address.trim()) {
+      toast("All supplier fields are required", "error");
+      return;
+    }
+
+    try {
+      if (editingSupplier) {
+        const { error } = await supabase
+          .from("porter_suppliers")
+          .update(supplierForm)
+          .eq("id", editingSupplier.id);
+        if (error) throw error;
+        toast("Supplier updated", "success");
+      } else {
+        const { error } = await supabase
+          .from("porter_suppliers")
+          .insert([{ ...supplierForm, created_by: userName || "admin" }]);
+        if (error) throw error;
+        toast("Supplier added", "success");
+      }
+      await loadSuppliers();
+      setSupplierModalOpen(false);
+      setEditingSupplier(null);
+      setSupplierForm({ name: "", contact: "", address: "" });
+    } catch (err) {
+      toast(`Failed to save supplier: ${(err as Error).message}`, "error");
+    }
   };
+
+  // Delete supplier
+  const handleDeleteSupplier = async (id: string) => {
+    if (!confirm("Delete this supplier?")) return;
+    try {
+      const { error } = await supabase
+        .from("porter_suppliers")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      toast("Supplier deleted", "success");
+      await loadSuppliers();
+    } catch (err) {
+      toast(`Failed to delete supplier: ${(err as Error).message}`, "error");
+    }
+  };
+
+  // Open supplier modal for editing
+  const openEditSupplier = (s: PorterSupplier) => {
+    setEditingSupplier(s);
+    setSupplierForm({ name: s.name, contact: s.contact, address: s.address });
+    setSupplierModalOpen(true);
+  };
+
 
   const loadBookings = useCallback(async () => {
     const { data, error } = await supabase
@@ -254,18 +270,20 @@ export default function PorterPage() {
   const openCreate = () => {
     setEditingBooking(null);
     setForm(emptyForm);
+    setFromSupplierSearch("");
+    setToSupplierSearch("");
     setModalOpen(true);
   };
 
   const openEdit = (b: PorterBooking) => {
     setEditingBooking(b);
+    const fromSupplier = suppliers.find((s) => s.name === b.supplier_name);
+    const toSupplier = suppliers.find((s) => s.name === b.receiver_name);
     setForm({
-      supplier_name: b.supplier_name,
-      supplier_target: "From",
-      receiver_name: b.receiver_name ?? "",
-      receiver_target: "To",
       materials: b.materials ?? [],
       materialInput: "",
+      from_supplier_id: fromSupplier?.id ?? "",
+      to_supplier_id: toSupplier?.id ?? "",
       approx_weight: b.approx_weight ?? "",
       pickup_location: b.pickup_location,
       drop_location: b.drop_location,
@@ -276,6 +294,8 @@ export default function PorterPage() {
       notes: b.notes ?? "",
       status: b.status,
     });
+    setFromSupplierSearch(fromSupplier?.name ?? "");
+    setToSupplierSearch(toSupplier?.name ?? "");
     setModalOpen(true);
   };
 
@@ -291,8 +311,8 @@ export default function PorterPage() {
 
   const handleSave = async (asDraft = false) => {
     if (!asDraft) {
-      if (!form.supplier_name.trim() || form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date) {
-        toast("Fill Supplier Name, at least one Material, Pickup & Drop locations", "error");
+      if (form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date) {
+        toast("Fill at least one Material, Pickup & Drop locations", "error");
         return;
       }
       const isUrl = (v: string) => /^https?:\/\//i.test(v.trim());
@@ -300,20 +320,17 @@ export default function PorterPage() {
         toast("Enter a physical address — not a website URL or Google link", "error");
         return;
       }
-    } else {
-      if (!form.supplier_name.trim()) {
-        toast("Supplier name is required even for drafts", "error");
-        return;
-      }
     }
     setSaving(true);
 
     const status: PorterBooking["status"] = asDraft ? "Draft" : (form.status === "Draft" ? "Pending" : form.status);
+    const fromSupplier = suppliers.find((s) => s.id === form.from_supplier_id);
+    const toSupplier = suppliers.find((s) => s.id === form.to_supplier_id);
 
     const payload = {
-      supplier_name: form.supplier_name.trim(),
-      receiver_name: form.receiver_name.trim() || null,
       materials: form.materials,
+      supplier_name: fromSupplier?.name || null,
+      receiver_name: toSupplier?.name || null,
       approx_weight: form.approx_weight.trim() || null,
       pickup_location: form.pickup_location.trim() || (asDraft ? "(draft)" : ""),
       drop_location: form.drop_location.trim() || (asDraft ? "(draft)" : ""),
@@ -367,12 +384,12 @@ export default function PorterPage() {
 
   const filtered = bookings.filter((b) =>
     filterStatus === "All" ? b.status !== "Completed" && b.status !== "Cancelled" && b.status !== "Draft"
-    : b.status === filterStatus
+      : b.status === filterStatus
   );
 
   const CREATE_SQL = `CREATE TABLE IF NOT EXISTS porter_bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  supplier_name TEXT NOT NULL,
+  supplier_name TEXT,
   receiver_name TEXT,
   materials TEXT[] NOT NULL DEFAULT '{}',
   approx_weight TEXT,
@@ -391,7 +408,8 @@ export default function PorterPage() {
 );
 ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
 -- Already-created installs:
--- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS receiver_name TEXT;`;
+-- ALTER TABLE porter_bookings ALTER COLUMN supplier_name DROP NOT NULL;
+-- UPDATE supervisors SET is_porter_supervisor = TRUE WHERE pin = '0000';`;
 
   if (tableError) {
     return (
@@ -427,12 +445,24 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
             </h1>
             <p className="text-sm text-gray-400">{bookings.length} total booking{bookings.length !== 1 ? "s" : ""}</p>
           </div>
-          {canCreate && (
-            <button onClick={openCreate}
-              className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
-              <Plus className="w-4 h-4" /> New Booking
-            </button>
-          )}
+          <div className="flex gap-2">
+            {hasPorterFullAccess && (
+              <button onClick={() => {
+                setEditingSupplier(null);
+                setSupplierForm({ name: "", contact: "", address: "" });
+                setSupplierModalOpen(true);
+              }}
+                className="flex items-center gap-2 text-sm font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 px-5 py-2.5 rounded-xl transition shadow-sm border border-primary-200">
+                <Settings className="w-4 h-4" /> Manage Suppliers
+              </button>
+            )}
+            {canCreate && (
+              <button onClick={openCreate}
+                className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
+                <Plus className="w-4 h-4" /> New Booking
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -452,29 +482,166 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
         <div className="space-y-3">
           {loading
             ? [...Array(3)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl border border-border p-5 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
-                  <div className="h-3 bg-gray-100 rounded w-2/3" />
-                </div>
-              ))
-            : filtered.length === 0
-            ? (
-              <div className="bg-white rounded-2xl border border-border p-16 text-center">
-                <p className="text-4xl mb-3">🚚</p>
-                <p className="text-sm text-gray-400 font-medium">No porter bookings found</p>
+              <div key={i} className="bg-white rounded-2xl border border-border p-5 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
+                <div className="h-3 bg-gray-100 rounded w-2/3" />
               </div>
-            )
-            : filtered.map((b) => (
-              <BookingCard key={b.id} booking={b}
-                canManage={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
-                canDelete={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-                onBook={() => setSummaryBooking(b)} />
-            ))}
+            ))
+            : filtered.length === 0
+              ? (
+                <div className="bg-white rounded-2xl border border-border p-16 text-center">
+                  <p className="text-4xl mb-3">🚚</p>
+                  <p className="text-sm text-gray-400 font-medium">No porter bookings found</p>
+                </div>
+              )
+              : filtered.map((b) => (
+                <BookingCard key={b.id} booking={b}
+                  canManage={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
+                  canDelete={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                  onBook={() => setSummaryBooking(b)} />
+              ))}
         </div>
       </div>
+
+      {/* Supplier Management Modal */}
+      {supplierModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setSupplierModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-border">
+              <h2 className="text-lg font-bold text-gray-900">
+                {editingSupplier ? "Edit Supplier" : "Add Supplier"}
+              </h2>
+              <button onClick={() => setSupplierModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 block">
+                  Supplier Name *
+                </label>
+                <input
+                  value={supplierForm.name}
+                  onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Enter supplier name..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 block">
+                  Contact *
+                </label>
+                <input
+                  value={supplierForm.contact}
+                  onChange={(e) => setSupplierForm((f) => ({ ...f, contact: e.target.value }))}
+                  placeholder="Enter contact numbers..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 block">
+                  Address *
+                </label>
+                <textarea
+                  value={supplierForm.address}
+                  onChange={(e) => setSupplierForm((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Enter full address..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button onClick={handleSaveSupplier}
+                  className="flex-1 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition">
+                  {editingSupplier ? "Update Supplier" : "Add Supplier"}
+                </button>
+                <button onClick={() => setSupplierModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-border text-gray-600 hover:bg-gray-50 text-sm font-semibold transition">
+                  Cancel
+                </button>
+              </div>
+
+              {!editingSupplier && (
+                <>
+                  <div className="pt-6 border-t border-border">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">Existing Suppliers</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {suppliers.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-8">No suppliers yet</p>
+                      ) : (
+                        suppliers.map((s) => (
+                          <div key={s.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                            <div className="flex-1">
+                              <div className="text-sm font-semibold text-gray-900">{s.name}</div>
+                              <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                <Phone className="w-3 h-3" /> {s.contact}
+                              </div>
+                              <div className="text-xs text-gray-500 flex items-start gap-1 mt-1">
+                                <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" /> <span className="break-words">{s.address}</span>
+                              </div>
+                            </div>
+                            <div className="flex gap-1 ml-3">
+                              <button onClick={() => openEditSupplier(s)}
+                                className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:bg-primary-100 p-2 rounded-lg transition">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => handleDeleteSupplier(s.id)}
+                                className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:bg-red-100 p-2 rounded-lg transition">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Porter Access — managers & admins only */}
+                  {(isManager || isAdmin) && (
+                    <div className="pt-6 border-t border-border">
+                      <h3 className="text-sm font-bold text-gray-900 mb-1">Porter Access</h3>
+                      <p className="text-xs text-gray-400 mb-4">Assign supervisors who can manage porter bookings and suppliers.</p>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {supervisorList.length === 0 ? (
+                          <p className="text-xs text-gray-400 text-center py-4">No supervisors found</p>
+                        ) : (
+                          supervisorList.map((sv) => (
+                            <div key={sv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-800">{sv.name}</span>
+                              </div>
+                              <button
+                                onClick={() => togglePorterSupervisor(sv.id, sv.is_porter_supervisor)}
+                                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
+                                  sv.is_porter_supervisor
+                                    ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600"
+                                    : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"
+                                }`}
+                              >
+                                {sv.is_porter_supervisor ? "Access Granted" : "Grant Access"}
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       {modalOpen && (
@@ -492,131 +659,6 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
             </div>
 
             <div className="p-6 space-y-5">
-
-              {/* Supplier Name — searchable dropdown with From/To target */}
-              <div ref={supplierRef}>
-                <div className="flex items-center justify-between mb-1.5 gap-2">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
-                    Supplier Name *
-                  </label>
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                    <span className="text-[10px] font-bold text-gray-400 px-1.5">Use as</span>
-                    {(["From", "To"] as const).map((t) => (
-                      <button key={t} type="button"
-                        onClick={() => setForm((f) => ({ ...f, supplier_target: t }))}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition ${
-                          form.supplier_target === t ? "bg-white text-primary-700 shadow-sm" : "text-gray-500"
-                        }`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  <input
-                    value={form.supplier_name}
-                    onChange={(e) => {
-                      setForm((f) => ({ ...f, supplier_name: e.target.value }));
-                      setShowSupplierDropdown(true);
-                    }}
-                    onFocus={() => setShowSupplierDropdown(true)}
-                    placeholder="Search or type supplier name..."
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
-                  />
-                  {showSupplierDropdown && filteredSuppliers.length > 0 && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-xl max-h-56 overflow-y-auto">
-                      {filteredSuppliers.map((s) => (
-                        <button
-                          key={s.name}
-                          type="button"
-                          onMouseDown={() => selectSupplier(s)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition border-b border-border last:border-0"
-                        >
-                          <div className="text-sm font-semibold text-gray-800">{s.name}</div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                              <Phone className="w-3 h-3" /> {s.contact}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{s.address}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Auto-fill indicator */}
-                {SUPPLIERS.some((s) => s.name === form.supplier_name) && (
-                  <p className="text-[11px] text-primary-600 mt-1.5 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Contact & {form.supplier_target === "From" ? "pickup" : "drop"} address auto-filled
-                  </p>
-                )}
-              </div>
-
-              {/* Receiver — searchable dropdown with From/To target */}
-              <div ref={receiverRef}>
-                <div className="flex items-center justify-between mb-1.5 gap-2">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
-                    Receiver
-                  </label>
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                    <span className="text-[10px] font-bold text-gray-400 px-1.5">Use as</span>
-                    {(["From", "To"] as const).map((t) => (
-                      <button key={t} type="button"
-                        onClick={() => setForm((f) => ({ ...f, receiver_target: t }))}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition ${
-                          form.receiver_target === t ? "bg-white text-primary-700 shadow-sm" : "text-gray-500"
-                        }`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  <input
-                    value={form.receiver_name}
-                    onChange={(e) => {
-                      setForm((f) => ({ ...f, receiver_name: e.target.value }));
-                      setShowReceiverDropdown(true);
-                    }}
-                    onFocus={() => setShowReceiverDropdown(true)}
-                    placeholder="Search or type receiver name..."
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
-                  />
-                  {showReceiverDropdown && filteredReceivers.length > 0 && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-xl max-h-56 overflow-y-auto">
-                      {filteredReceivers.map((s) => (
-                        <button
-                          key={s.name}
-                          type="button"
-                          onMouseDown={() => selectReceiver(s)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition border-b border-border last:border-0"
-                        >
-                          <div className="text-sm font-semibold text-gray-800">{s.name}</div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                              <Phone className="w-3 h-3" /> {s.contact}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{s.address}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {SUPPLIERS.some((s) => s.name === form.receiver_name) && (
-                  <p className="text-[11px] text-primary-600 mt-1.5 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> {form.receiver_target === "From" ? "Pickup" : "Drop"} address auto-filled
-                  </p>
-                )}
-              </div>
 
               {/* Materials (multi-add) */}
               <div>
@@ -670,6 +712,124 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 </div>
               </div>
 
+              {/* From Supplier */}
+              <div className="relative" ref={fromSupplierRef}>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                  <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-green-500" /> From</span>
+                </label>
+                <input
+                  type="text"
+                  value={fromSupplierSearch}
+                  onChange={(e) => setFromSupplierSearch(e.target.value)}
+                  onFocus={() => setFromSupplierOpen(true)}
+                  placeholder="Search supplier..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                />
+                {fromSupplierOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {suppliers.filter((s) => s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase())).length === 0 ? (
+                      <div className="p-3 text-xs text-gray-400 text-center">No suppliers found</div>
+                    ) : (
+                      suppliers.filter((s) => s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase())).map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({
+                              ...f,
+                              from_supplier_id: s.id,
+                              pickup_location: s.address,
+                            }));
+                            setFromSupplierSearch(s.name);
+                            setFromSupplierOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm font-medium text-gray-700 transition"
+                        >
+                          {s.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                {form.from_supplier_id && suppliers.find((s) => s.id === form.from_supplier_id) && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    {(() => {
+                      const supplier = suppliers.find((s) => s.id === form.from_supplier_id)!;
+                      return (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-green-900">{supplier.name}</div>
+                          <div className="text-xs text-green-700 flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {supplier.contact}
+                          </div>
+                          <div className="text-xs text-green-700 flex items-start gap-1">
+                            <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" /> <span className="break-words">{supplier.address}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* To Supplier */}
+              <div className="relative" ref={toSupplierRef}>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                  <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-red-500" /> To</span>
+                </label>
+                <input
+                  type="text"
+                  value={toSupplierSearch}
+                  onChange={(e) => setToSupplierSearch(e.target.value)}
+                  onFocus={() => setToSupplierOpen(true)}
+                  placeholder="Search supplier..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                />
+                {toSupplierOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {suppliers.filter((s) => s.name.toLowerCase().includes(toSupplierSearch.toLowerCase())).length === 0 ? (
+                      <div className="p-3 text-xs text-gray-400 text-center">No suppliers found</div>
+                    ) : (
+                      suppliers.filter((s) => s.name.toLowerCase().includes(toSupplierSearch.toLowerCase())).map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({
+                              ...f,
+                              to_supplier_id: s.id,
+                              drop_location: s.address,
+                            }));
+                            setToSupplierSearch(s.name);
+                            setToSupplierOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm font-medium text-gray-700 transition"
+                        >
+                          {s.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                {form.to_supplier_id && suppliers.find((s) => s.id === form.to_supplier_id) && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                    {(() => {
+                      const supplier = suppliers.find((s) => s.id === form.to_supplier_id)!;
+                      return (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-red-900">{supplier.name}</div>
+                          <div className="text-xs text-red-700 flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {supplier.contact}
+                          </div>
+                          <div className="text-xs text-red-700 flex items-start gap-1">
+                            <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" /> <span className="break-words">{supplier.address}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
               {/* Pickup Location */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
@@ -701,11 +861,10 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                   {VEHICLE_TYPES.map((v) => (
                     <button key={v} type="button"
                       onClick={() => setForm((f) => ({ ...f, vehicle_type: f.vehicle_type === v ? "" : v as PorterBooking["vehicle_type"] }))}
-                      className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border text-xs font-semibold transition ${
-                        form.vehicle_type === v
-                          ? "bg-primary-50 border-primary-400 text-primary-700"
-                          : "border-border text-gray-500 hover:bg-gray-50"
-                      }`}>
+                      className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border text-xs font-semibold transition ${form.vehicle_type === v
+                        ? "bg-primary-50 border-primary-400 text-primary-700"
+                        : "border-border text-gray-500 hover:bg-gray-50"
+                        }`}>
                       <span className="text-xl">{vehicleIcons[v]}</span>
                       <span className="leading-tight text-center text-[10px]">{v}</span>
                     </button>
@@ -809,16 +968,17 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
             {b.vehicle_type ? vehicleIcons[b.vehicle_type] : "🚚"}
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900">{b.supplier_name}</h3>
-            {b.receiver_name && (
-              <p className="text-[11px] text-gray-500 mt-0.5">→ {b.receiver_name}</p>
-            )}
-            {materials.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
+            {materials.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
                 {materials.map((m) => (
-                  <span key={m} className="text-[10px] font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{m}</span>
+                  <span key={m} className="text-[11px] font-semibold bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{m}</span>
                 ))}
               </div>
+            ) : (
+              <h3 className="text-sm font-bold text-gray-900">Porter Booking</h3>
+            )}
+            {b.supplier_name && (
+              <p className="text-[11px] text-gray-400 mt-0.5">{b.supplier_name}</p>
             )}
           </div>
         </div>
@@ -943,7 +1103,6 @@ function BookingSummaryModal({
   const materials = b.materials ?? [];
 
   const summaryText = [
-    `Supplier: ${b.supplier_name}`,
     materials.length > 0 ? `Materials: ${materials.join(", ")}` : null,
     b.approx_weight ? `Weight: ${b.approx_weight}` : null,
     `Pickup Address: ${b.pickup_location}`,
@@ -1038,8 +1197,8 @@ function BookingSummaryModal({
 
   const statusColor =
     status?.kind === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : status?.kind === "error" ? "bg-red-50 text-red-700 border-red-200"
-    : "bg-blue-50 text-blue-700 border-blue-200";
+      : status?.kind === "error" ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-blue-50 text-blue-700 border-blue-200";
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1078,11 +1237,7 @@ function BookingSummaryModal({
               }}>{b.status}</div>
             </div>
 
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{b.supplier_name}</h3>
-            {b.receiver_name && (
-              <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px" }}>→ {b.receiver_name}</p>
-            )}
-            {!b.receiver_name && <div style={{ height: 8 }} />}
+            <div style={{ height: 4 }} />
 
             {materials.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
@@ -1132,9 +1287,8 @@ function BookingSummaryModal({
 
           <div className="flex gap-3">
             <button onClick={handleCopy}
-              className={`flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl border text-sm font-semibold transition ${
-                copied ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "border-border text-gray-600 hover:bg-gray-50"
-              }`}>
+              className={`flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl border text-sm font-semibold transition ${copied ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "border-border text-gray-600 hover:bg-gray-50"
+                }`}>
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               {copied ? "Copied!" : "Copy Text"}
             </button>
