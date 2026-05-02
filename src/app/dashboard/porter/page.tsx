@@ -93,6 +93,8 @@ export default function PorterPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<PorterBooking | null>(null);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
+  const [historySearch, setHistorySearch] = useState("");
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -382,10 +384,28 @@ export default function PorterPage() {
 
   const canCreate = hasFullAccess || isSupervisor || isEmployee;
 
-  const filtered = bookings.filter((b) =>
-    filterStatus === "All" ? b.status !== "Completed" && b.status !== "Cancelled" && b.status !== "Draft"
-      : b.status === filterStatus
+  const activeBookings = bookings.filter((b) =>
+    b.status !== "Completed" && b.status !== "Cancelled"
   );
+
+  const filtered = activeBookings.filter((b) =>
+    filterStatus === "All" ? true : b.status === filterStatus
+  );
+
+  const historyBookings = bookings.filter((b) =>
+    b.status === "Completed" || b.status === "Cancelled"
+  ).filter((b) => {
+    if (!historySearch.trim()) return true;
+    const q = historySearch.toLowerCase();
+    return (
+      b.porter_id?.toLowerCase().includes(q) ||
+      b.supplier_name?.toLowerCase().includes(q) ||
+      b.receiver_name?.toLowerCase().includes(q) ||
+      b.booked_by.toLowerCase().includes(q) ||
+      b.pickup_location.toLowerCase().includes(q) ||
+      b.drop_location.toLowerCase().includes(q)
+    );
+  });
 
   const CREATE_SQL = `CREATE TABLE IF NOT EXISTS porter_bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -465,45 +485,114 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-1 flex-wrap bg-white border border-border rounded-2xl p-3">
-          {["All", "Draft", "Pending", "Confirmed", "In Transit", "Completed", "Cancelled"].map((f) => (
-            <button key={f} onClick={() => setFilterStatus(f)}
-              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterStatus === f ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {f}
-            </button>
-          ))}
-          <span className="text-xs text-gray-400 font-medium ml-auto self-center">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-          </span>
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white border border-border rounded-2xl p-1.5 w-fit">
+          <button onClick={() => setActiveTab("active")}
+            className={`text-xs font-bold px-4 py-2 rounded-xl transition ${activeTab === "active" ? "bg-primary-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+            Active Bookings
+          </button>
+          <button onClick={() => setActiveTab("history")}
+            className={`text-xs font-bold px-4 py-2 rounded-xl transition ${activeTab === "history" ? "bg-primary-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+            History
+          </button>
         </div>
 
-        {/* Cards */}
-        <div className="space-y-3">
-          {loading
-            ? [...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-border p-5 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
-                <div className="h-3 bg-gray-100 rounded w-2/3" />
-              </div>
-            ))
-            : filtered.length === 0
-              ? (
-                <div className="bg-white rounded-2xl border border-border p-16 text-center">
-                  <p className="text-4xl mb-3">🚚</p>
-                  <p className="text-sm text-gray-400 font-medium">No porter bookings found</p>
-                </div>
-              )
-              : filtered.map((b) => (
-                <BookingCard key={b.id} booking={b}
-                  canManage={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
-                  canDelete={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                  onStatusChange={handleStatusChange}
-                  onBook={() => setSummaryBooking(b)} />
+        {activeTab === "active" && (
+          <>
+            {/* Status Filters */}
+            <div className="flex gap-1 flex-wrap bg-white border border-border rounded-2xl p-3">
+              {["All", "Draft", "Pending", "Confirmed", "In Transit"].map((f) => (
+                <button key={f} onClick={() => setFilterStatus(f)}
+                  className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterStatus === f ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                  {f}
+                </button>
               ))}
-        </div>
+              <span className="text-xs text-gray-400 font-medium ml-auto self-center">
+                {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {/* Active Cards */}
+            <div className="space-y-3">
+              {loading
+                ? [...Array(3)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-border p-5 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
+                    <div className="h-3 bg-gray-100 rounded w-2/3" />
+                  </div>
+                ))
+                : filtered.length === 0
+                  ? (
+                    <div className="bg-white rounded-2xl border border-border p-16 text-center">
+                      <p className="text-4xl mb-3">🚚</p>
+                      <p className="text-sm text-gray-400 font-medium">No active bookings found</p>
+                    </div>
+                  )
+                  : filtered.map((b) => (
+                    <BookingCard key={b.id} booking={b}
+                      canManage={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
+                      canDelete={hasPorterFullAccess || (b.booked_by === userName && b.status !== "Completed")}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onStatusChange={handleStatusChange}
+                      onBook={() => setSummaryBooking(b)} />
+                  ))}
+            </div>
+          </>
+        )}
+
+        {/* History Tab */}
+        {activeTab === "history" && (
+          <>
+            {/* Search / Filter */}
+            <div className="bg-white border border-border rounded-2xl p-3 flex gap-3 items-center">
+              <input
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="Search by Porter ID (e.g. POR-0001), supplier, or name..."
+                className="flex-1 px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+              />
+              {historySearch && (
+                <button onClick={() => setHistorySearch("")}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition">
+                  Clear
+                </button>
+              )}
+              <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+                {historyBookings.length} record{historyBookings.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {/* History Cards */}
+            <div className="space-y-3">
+              {loading
+                ? [...Array(3)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-border p-5 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
+                    <div className="h-3 bg-gray-100 rounded w-2/3" />
+                  </div>
+                ))
+                : historyBookings.length === 0
+                  ? (
+                    <div className="bg-white rounded-2xl border border-border p-16 text-center">
+                      <p className="text-4xl mb-3">📦</p>
+                      <p className="text-sm text-gray-400 font-medium">
+                        {historySearch ? "No bookings match your search" : "No completed or cancelled bookings yet"}
+                      </p>
+                    </div>
+                  )
+                  : historyBookings.map((b) => (
+                    <BookingCard key={b.id} booking={b}
+                      canManage={false}
+                      canDelete={hasPorterFullAccess}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onStatusChange={handleStatusChange}
+                      onBook={() => setSummaryBooking(b)} />
+                  ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Supplier Management Modal */}
@@ -968,6 +1057,13 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
             {b.vehicle_type ? vehicleIcons[b.vehicle_type] : "🚚"}
           </div>
           <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              {b.porter_id && (
+                <span className="text-[11px] font-bold text-primary-700 bg-primary-50 border border-primary-200 px-2 py-0.5 rounded-full tracking-wide">
+                  {b.porter_id}
+                </span>
+              )}
+            </div>
             {materials.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {materials.map((m) => (

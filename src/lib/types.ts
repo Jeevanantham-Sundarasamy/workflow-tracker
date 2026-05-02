@@ -209,7 +209,8 @@ export const QC_STATUSES = ["Approved", "Rejected"] as const;
 
 export interface PorterBooking {
   id: string;
-  supplier_name: string;
+  porter_id: string | null;
+  supplier_name: string | null;
   receiver_name: string | null;
   materials: string[];
   approx_weight: string | null;
