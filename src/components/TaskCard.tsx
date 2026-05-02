@@ -16,6 +16,9 @@ interface TaskCardProps {
   onDelete: (id: string) => void;
   onViewDetail?: (task: Task) => void;
   onShare?: (task: Task) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 const statusStyles: Record<string, string> = {
@@ -44,6 +47,9 @@ function TaskCard({
   onDelete,
   onViewDetail,
   onShare,
+  selectable,
+  selected,
+  onSelect,
 }: TaskCardProps) {
   const today = new Date().toISOString().split("T")[0];
   const isOverdue = task.status !== "Done" && task.status !== "Cancelled" && task.due_date < today;
@@ -69,6 +75,7 @@ function TaskCard({
     <>
     <div
       className={`bg-white rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md ${
+        selected ? "ring-2 ring-primary-500 border-primary-300" :
         isOverdue
           ? "border-l-4 border-l-red-400 border-t-border border-r-border border-b-border"
           : "border-border"
@@ -78,6 +85,15 @@ function TaskCard({
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            {selectable && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={() => onSelect?.(task.id)}
+                className="w-4 h-4 rounded accent-primary-600 cursor-pointer flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
             <h3 className="text-sm font-bold text-gray-900 truncate">
               {task.task}
             </h3>

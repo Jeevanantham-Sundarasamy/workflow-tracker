@@ -206,3 +206,26 @@ export interface ProjectTaskActivity {
 export const PROJECT_STATUSES = ["Active", "Completed", "On Hold"] as const;
 export const PROJECT_TASK_STATUSES = ["Pending", "In Progress", "Done"] as const;
 export const QC_STATUSES = ["Approved", "Rejected"] as const;
+
+export interface PorterBooking {
+  id: string;
+  supplier_name: string;
+  receiver_name: string | null;
+  materials: string[];
+  approx_weight: string | null;
+  pickup_location: string;
+  drop_location: string;
+  vehicle_type: "Bike" | "Scooter" | "3 Wheeler" | "4 Wheel Auto" | "Truck" | "Pickup" | null;
+  contact: string | null;
+  booking_date: string;
+  booking_time: string | null;
+  status: "Draft" | "Pending" | "Confirmed" | "In Transit" | "Completed" | "Cancelled";
+  booked_by: string;
+  booked_by_role: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export const PORTER_STATUSES = ["Draft", "Pending", "Confirmed", "In Transit", "Completed", "Cancelled"] as const;
+export const VEHICLE_TYPES = ["Bike", "Scooter", "3 Wheeler", "4 Wheel Auto", "Truck"] as const;

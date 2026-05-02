@@ -14,7 +14,7 @@ import ShareTaskModal from "@/components/ShareTaskModal";
 import PinModal from "@/components/PinModal";
 import { TaskCardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, CheckSquare, Share2, X as XIcon } from "lucide-react";
 
 export default function TasksPage() {
   const { toast } = useToast();
@@ -29,6 +29,7 @@ export default function TasksPage() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterSup, setFilterSup] = useState("All");
+  const [filterEmp, setFilterEmp] = useState("All");
   const [filterCustomer, setFilterCustomer] = useState("All");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -36,7 +37,9 @@ export default function TasksPage() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
-  const [shareTask, setShareTask] = useState<Task | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [shareTasks, setShareTasks] = useState<Task[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -92,6 +95,7 @@ export default function TasksPage() {
     if (filterStatus === "Completed" && t.status !== "Done") return false;
     if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
+    if (filterEmp !== "All" && t.assigned_to !== filterEmp && !(t.extra_assignees ?? []).includes(filterEmp)) return false;
     if (filterCustomer !== "All" && t.customer_id !== filterCustomer) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
@@ -115,6 +119,24 @@ export default function TasksPage() {
   const canCreateTask = hasFullAccess || isSupervisor;
   const canEditTask = hasFullAccess || isSupervisor;
   const canDeleteTask = hasFullAccess;
+  const canSelectMultiple = hasFullAccess || isSupervisor;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+
+  const shareSelected = () => {
+    const toShare = filtered.filter((t) => selectedIds.has(t.id));
+    if (toShare.length === 0) return;
+    setShareTasks(toShare);
+    exitSelectMode();
+  };
 
   const handlePriorityChange = async (id: string, priority: string) => {
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, priority: priority as Task["priority"] } : t)));
@@ -161,7 +183,7 @@ export default function TasksPage() {
           .filter((n): n is string => !!n && n !== actor);
         const label = assigneeList.length > 1 ? assigneeList.join(", ") : (data.assigned_to || data.supervisor);
         await createNotification(`New task "${data.task}" → ${label}`, "success", created.id, assigneeList);
-        setShareTask(created); }
+        setShareTasks([created]); }
       else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
     }
     setTaskModalOpen(false); setEditingTask(null);
@@ -187,11 +209,34 @@ export default function TasksPage() {
             </h1>
             <p className="text-sm text-gray-400">{roleFiltered.length} total</p>
           </div>
-          {canCreateTask && (
-            <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
-              className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
-              <Plus className="w-4 h-4" /> New Task</button>
-          )}
+          <div className="flex items-center gap-2">
+            {canSelectMultiple && !selectMode && (
+              <button onClick={() => setSelectMode(true)}
+                className="flex items-center gap-2 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-xl transition">
+                <CheckSquare className="w-4 h-4" /> Select
+              </button>
+            )}
+            {selectMode && (
+              <>
+                <button onClick={exitSelectMode}
+                  className="flex items-center gap-2 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-xl transition">
+                  <XIcon className="w-4 h-4" /> Cancel
+                </button>
+                {selectedIds.size > 0 && (
+                  <button onClick={shareSelected}
+                    className="flex items-center gap-2 text-sm font-semibold text-white bg-green-500 hover:bg-green-600 px-4 py-2.5 rounded-xl transition shadow-sm">
+                    <Share2 className="w-4 h-4" /> Share {selectedIds.size}
+                  </button>
+                )}
+              </>
+            )}
+            {canCreateTask && !selectMode && (
+              <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
+                className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
+                <Plus className="w-4 h-4" /> New Task
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap bg-white rounded-2xl border border-border p-3 sm:p-4">
           <div className="relative flex-1 min-w-[180px]">
@@ -211,12 +256,22 @@ export default function TasksPage() {
           </div>
           {!isEmployee && (
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
-              className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          )}
+          {!isEmployee && (
+            <select value={filterEmp} onChange={(e) => setFilterEmp(e.target.value)}
+              className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              <option value="All">All Employees</option>
+              {(isSupervisor && !hasFullAccess
+                ? employees.filter((e) => e.supervisor_names && e.supervisor_names.includes(userName!))
+                : employees
+              ).map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
+            </select>
           )}
           {customers.length > 0 && (
             <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
-              className="text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Customers / Machines</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -243,15 +298,18 @@ export default function TasksPage() {
           {loading ? [...Array(3)].map((_, i) => <TaskCardSkeleton key={i} />) :
             filtered.length ? filtered.map((t) => (
               <TaskCard key={t.id} task={t}
-                canEdit={canEditTask}
-                canDelete={canDeleteTask}
-                canChangeStatus={hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!)))}
+                canEdit={canEditTask && !selectMode}
+                canDelete={canDeleteTask && !selectMode}
+                canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!))))}
                 onStatusChange={handleStatusChange}
-                onPriorityChange={canEditTask ? handlePriorityChange : undefined}
+                onPriorityChange={canEditTask && !selectMode ? handlePriorityChange : undefined}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}
-                onViewDetail={(task) => setDetailTask(task)}
-                onShare={(task) => setShareTask(task)} />
+                onViewDetail={!selectMode ? (task) => setDetailTask(task) : undefined}
+                onShare={!selectMode ? (task) => setShareTasks([task]) : undefined}
+                selectable={selectMode}
+                selected={selectedIds.has(t.id)}
+                onSelect={toggleSelect} />
             )) : (
               <div className="bg-white rounded-2xl border border-border p-16 text-center">
                 <p className="text-4xl mb-3">📭</p><p className="text-sm text-gray-400 font-medium">No tasks found</p></div>
@@ -262,7 +320,7 @@ export default function TasksPage() {
         employees={modalEmployees} customers={customers} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
-      <ShareTaskModal open={!!shareTask} task={shareTask} onClose={() => setShareTask(null)} />
+      <ShareTaskModal open={shareTasks.length > 0} tasks={shareTasks} onClose={() => setShareTasks([])} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
         onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />
     </div>

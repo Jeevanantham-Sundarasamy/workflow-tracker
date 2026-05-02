@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Workflow,
+  Truck,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
@@ -23,6 +24,7 @@ type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee
 const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
   { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
+  { label: "Porter Booking", href: "/dashboard/porter", icon: Truck, access: "logged_in" },
   { label: "Team", href: "/dashboard/team", icon: Users, access: "full_access" },
   { label: "Customers", href: "/dashboard/customers", icon: Building2, access: "not_employee" },
   { label: "Production", href: "/dashboard/production", icon: Workflow, access: "logged_in" },

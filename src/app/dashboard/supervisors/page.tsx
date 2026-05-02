@@ -17,6 +17,7 @@ interface SupervisorData {
   name: string;
   pin: string | null;
   department: string | null;
+  is_porter_supervisor: boolean;
 }
 
 export default function SupervisorsPage() {
@@ -28,6 +29,7 @@ export default function SupervisorsPage() {
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
+  const [newIsPorterSup, setNewIsPorterSup] = useState(false);
   const [editingPin, setEditingPin] = useState<string | null>(null);
   const [editPinValue, setEditPinValue] = useState("");
   const [showPin, setShowPin] = useState<string | null>(null);
@@ -44,7 +46,9 @@ export default function SupervisorsPage() {
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
-      setSupervisors((sr.data || []).map((s: { name: string; pin?: string; department?: string }) => ({ name: s.name, pin: s.pin || null, department: s.department || null })));
+      setSupervisors((sr.data || []).map((s: { name: string; pin?: string; department?: string; is_porter_supervisor?: boolean }) => ({
+        name: s.name, pin: s.pin || null, department: s.department || null, is_porter_supervisor: !!s.is_porter_supervisor,
+      })));
     } catch {
       // offline
     }
@@ -61,12 +65,21 @@ export default function SupervisorsPage() {
       if (usedBy) { toast(`PIN already used by ${usedBy}`, "error"); return; }
     }
     const department = newDepartment.trim() || null;
-    const { error } = await supabase.from("supervisors").insert({ name, pin, department });
+    const is_porter_supervisor = newIsPorterSup;
+    const { error } = await supabase.from("supervisors").insert({ name, pin, department, is_porter_supervisor });
     if (!error) {
-      setSupervisors((p) => [...p, { name, pin, department }].sort((a, b) => a.name.localeCompare(b.name)));
-      setNewName(""); setNewPin(""); setNewDepartment("");
+      setSupervisors((p) => [...p, { name, pin, department, is_porter_supervisor }].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewName(""); setNewPin(""); setNewDepartment(""); setNewIsPorterSup(false);
       toast("Supervisor added", "success");
     } else toast("Failed to add", "error");
+  };
+
+  const togglePorterSupervisor = async (name: string, current: boolean) => {
+    const { error } = await supabase.from("supervisors").update({ is_porter_supervisor: !current }).eq("name", name);
+    if (!error) {
+      setSupervisors((p) => p.map((s) => s.name === name ? { ...s, is_porter_supervisor: !current } : s));
+      toast(!current ? "Marked as Porter Supervisor" : "Removed Porter Supervisor role", "success");
+    } else toast("Failed to update", "error");
   };
 
   const removeSupervisor = async (name: string) => {
@@ -162,6 +175,12 @@ export default function SupervisorsPage() {
                 placeholder="Department (optional)"
                 className="px-4 py-2.5 rounded-xl border border-border bg-surface-secondary text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
             </div>
+            <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
+              <input type="checkbox" checked={newIsPorterSup} onChange={(e) => setNewIsPorterSup(e.target.checked)}
+                className="w-4 h-4 rounded border-border accent-primary-600 cursor-pointer" />
+              <span className="text-sm font-semibold text-gray-700">Porter Supervisor</span>
+              <span className="text-xs text-gray-400">— full control over Porter bookings</span>
+            </label>
             <button onClick={addSupervisor}
               className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition">
               <Plus className="w-4 h-4" /> Add Supervisor
@@ -219,6 +238,22 @@ export default function SupervisorsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Porter Supervisor toggle */}
+                  {hasFullAccess && (
+                    <div className="mb-2 p-2.5 rounded-xl bg-gray-50 border border-border-light flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">Porter Supervisor:</span>
+                      {sup.is_porter_supervisor ? (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Yes</span>
+                      ) : (
+                        <span className="text-[11px] text-gray-400 italic">No</span>
+                      )}
+                      <button onClick={() => togglePorterSupervisor(sup.name, sup.is_porter_supervisor)}
+                        className="ml-auto text-[10px] font-bold text-primary-600 hover:text-primary-700">
+                        {sup.is_porter_supervisor ? "Remove" : "Make Porter Supervisor"}
+                      </button>
+                    </div>
+                  )}
 
                   {/* PIN section */}
                   {hasFullAccess && (
