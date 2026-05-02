@@ -266,8 +266,31 @@ CREATE TABLE porter_bookings (
 -- Migration for existing installs:
 -- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS receiver_name TEXT;
 -- ALTER TABLE porter_bookings ALTER COLUMN supplier_name DROP NOT NULL;
+-- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS porter_id TEXT UNIQUE;
 -- Set porter supervisor flag for the supervisor with pin '0000':
 -- UPDATE supervisors SET is_porter_supervisor = TRUE WHERE pin = '0000';
+
+-- Porter ID auto-generation (MAX-based, reuses deleted numbers)
+CREATE OR REPLACE FUNCTION generate_porter_id()
+RETURNS TRIGGER AS $$
+DECLARE
+  next_num INT;
+BEGIN
+  IF NEW.porter_id IS NULL THEN
+    SELECT COALESCE(MAX(CAST(SUBSTRING(porter_id FROM 5) AS INTEGER)), 0) + 1
+    INTO next_num
+    FROM porter_bookings
+    WHERE porter_id IS NOT NULL AND porter_id ~ '^POR-[0-9]+$';
+    NEW.porter_id := 'POR-' || LPAD(next_num::TEXT, 4, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_porter_id ON porter_bookings;
+CREATE TRIGGER set_porter_id
+  BEFORE INSERT ON porter_bookings
+  FOR EACH ROW EXECUTE FUNCTION generate_porter_id();
 
 -- ==================== PRODUCTION TABLES ====================
 
