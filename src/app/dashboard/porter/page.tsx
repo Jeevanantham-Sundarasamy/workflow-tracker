@@ -104,6 +104,7 @@ export default function PorterPage() {
   const [editingSupplier, setEditingSupplier] = useState<PorterSupplier | null>(null);
   const [supplierForm, setSupplierForm] = useState({ name: "", contact: "", address: "" });
   const [supervisorList, setSupervisorList] = useState<{ id: string; name: string; is_porter_supervisor: boolean }[]>([]);
+  const [porterAccessModalOpen, setPorterAccessModalOpen] = useState(false);
   const [fromSupplierSearch, setFromSupplierSearch] = useState("");
   const [toSupplierSearch, setToSupplierSearch] = useState("");
   const [fromSupplierOpen, setFromSupplierOpen] = useState(false);
@@ -466,6 +467,12 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
             <p className="text-sm text-gray-400">{bookings.length} total booking{bookings.length !== 1 ? "s" : ""}</p>
           </div>
           <div className="flex gap-2">
+            {(isManager || isAdmin) && (
+              <button onClick={() => setPorterAccessModalOpen(true)}
+                className="flex items-center gap-2 text-sm font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 px-5 py-2.5 rounded-xl transition shadow-sm border border-purple-200">
+                <User className="w-4 h-4" /> Porter Access
+              </button>
+            )}
             {hasPorterFullAccess && (
               <button onClick={() => {
                 setEditingSupplier(null);
@@ -595,6 +602,53 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
         )}
       </div>
 
+      {/* Porter Access Modal */}
+      {porterAccessModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setPorterAccessModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-border">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Porter Access</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Grant or revoke porter management access for supervisors.</p>
+              </div>
+              <button onClick={() => setPorterAccessModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {supervisorList.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">No supervisors found</p>
+                ) : (
+                  supervisorList.map((sv) => (
+                    <div key={sv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-border">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                          <User className="w-4 h-4 text-purple-500" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-800">{sv.name}</span>
+                      </div>
+                      <button
+                        onClick={() => togglePorterSupervisor(sv.id, sv.is_porter_supervisor)}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
+                          sv.is_porter_supervisor
+                            ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600"
+                            : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"
+                        }`}
+                      >
+                        {sv.is_porter_supervisor ? "Access Granted" : "Grant Access"}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Supplier Management Modal */}
       {supplierModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -694,37 +748,6 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                     </div>
                   </div>
 
-                  {/* Porter Access — managers & admins only */}
-                  {(isManager || isAdmin) && (
-                    <div className="pt-6 border-t border-border">
-                      <h3 className="text-sm font-bold text-gray-900 mb-1">Porter Access</h3>
-                      <p className="text-xs text-gray-400 mb-4">Assign supervisors who can manage porter bookings and suppliers.</p>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {supervisorList.length === 0 ? (
-                          <p className="text-xs text-gray-400 text-center py-4">No supervisors found</p>
-                        ) : (
-                          supervisorList.map((sv) => (
-                            <div key={sv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                              <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm font-medium text-gray-800">{sv.name}</span>
-                              </div>
-                              <button
-                                onClick={() => togglePorterSupervisor(sv.id, sv.is_porter_supervisor)}
-                                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
-                                  sv.is_porter_supervisor
-                                    ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600"
-                                    : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"
-                                }`}
-                              >
-                                {sv.is_porter_supervisor ? "Access Granted" : "Grant Access"}
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
             </div>
