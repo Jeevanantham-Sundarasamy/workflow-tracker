@@ -23,7 +23,12 @@ type Nav = Navigator & {
 
 // ── Suppliers are loaded from the database ────────────────────────────────────
 
-// ── Porter Share / Open ───────────────────────────────────────────────────────
+// ── Open Porter website — user clicks "Open App" banner on porter.in ─────────
+function openPorterWebsite() {
+  window.open("https://porter.in", "_blank", "noopener,noreferrer");
+}
+
+// ── Share booking details via share sheet or custom dialog ────────────────────
 // Returns true if native share was used, false if custom dialog should be shown
 async function tryNativeShare(text: string): Promise<boolean> {
   const url = "https://porter.in";
@@ -264,7 +269,11 @@ export default function PorterPage() {
     setLoading(false);
   }, [hasFullAccess, isSupervisor, isEmployee, isPorterSupervisor, userName, toast]);
 
-  useEffect(() => { loadBookings(); }, [loadBookings]);
+  useEffect(() => {
+    loadBookings();
+    const interval = setInterval(loadBookings, 5000);
+    return () => clearInterval(interval);
+  }, [loadBookings]);
 
   const openCreate = () => {
     setEditingBooking(null);
@@ -1237,7 +1246,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
 
       {/* Actions */}
       <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-        <button onClick={() => onPorterShare(cardShareText)}
+        <button onClick={openPorterWebsite}
           className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
           <ExternalLink className="w-3 h-3" /> Book via Porter
         </button>
@@ -1498,9 +1507,9 @@ function BookingSummaryModal({
             </button>
           </div>
 
-          <button onClick={() => onPorterShare(summaryText)}
+          <button onClick={openPorterWebsite}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition shadow-sm">
-            <ExternalLink className="w-4 h-4" /> Book via Porter App
+            <ExternalLink className="w-4 h-4" /> Open Porter App
           </button>
 
           <p className="text-[11px] text-gray-400 text-center">
