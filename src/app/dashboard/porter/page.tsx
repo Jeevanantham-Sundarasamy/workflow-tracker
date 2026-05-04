@@ -23,9 +23,33 @@ type Nav = Navigator & {
 
 // ── Suppliers are loaded from the database ────────────────────────────────────
 
-// ── Open Porter website — user clicks "Open App" banner on porter.in ─────────
+// ── Open Porter App directly ──────────────────────────────────────────────────
 function openPorterWebsite() {
-  window.open("https://porter.in", "_blank", "noopener,noreferrer");
+  const ua = navigator.userAgent;
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+
+  if (isAndroid) {
+    // Try custom scheme; if not installed Chrome falls back to Play Store
+    const storeUrl = encodeURIComponent(
+      "https://play.google.com/store/apps/details?id=in.porter.user"
+    );
+    window.location.href =
+      `intent://home#Intent;scheme=porter;package=in.porter.user;S.browser_fallback_url=${storeUrl};end`;
+  } else if (isIOS) {
+    // Try porter:// scheme; fall back to App Store after 2.5s if not installed
+    const timer = setTimeout(() => {
+      window.location.href =
+        "https://apps.apple.com/in/app/porter-delivery/id1066935012";
+    }, 2500);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) clearTimeout(timer);
+    }, { once: true });
+    window.location.href = "porter://home";
+  } else {
+    // Desktop: open website
+    window.open("https://porter.in", "_blank", "noopener,noreferrer");
+  }
 }
 
 // ── Share booking details via share sheet or custom dialog ────────────────────
@@ -105,7 +129,9 @@ export default function PorterPage() {
   const [editingSupplier, setEditingSupplier] = useState<PorterSupplier | null>(null);
   const [supplierForm, setSupplierForm] = useState({ name: "", contact: "", address: "" });
   const [supervisorList, setSupervisorList] = useState<{ id: string; name: string; is_porter_supervisor: boolean }[]>([]);
+  const [employeeList, setEmployeeList] = useState<{ id: string; name: string; is_porter_employee: boolean }[]>([]);
   const [porterAccessModalOpen, setPorterAccessModalOpen] = useState(false);
+  const [porterAccessTab, setPorterAccessTab] = useState<"supervisors" | "employees">("supervisors");
   const [fromSupplierSearch, setFromSupplierSearch] = useState("");
   const [toSupplierSearch, setToSupplierSearch] = useState("");
   const [fromSupplierOpen, setFromSupplierOpen] = useState(false);
@@ -129,6 +155,8 @@ export default function PorterPage() {
     }
   }, [fromSupplierOpen, toSupplierOpen]);
 
+  const [isPorterEmployee, setIsPorterEmployee] = useState(false);
+
   // Load porter-supervisor flag for current user
   useEffect(() => {
     if (!userName || !isSupervisor) { setIsPorterSupervisor(false); return; }
@@ -140,7 +168,18 @@ export default function PorterPage() {
     return () => { cancelled = true; };
   }, [userName, isSupervisor]);
 
-  const hasPorterFullAccess = hasFullAccess || isPorterSupervisor;
+  // Load porter-employee flag for current user
+  useEffect(() => {
+    if (!userName || !isEmployee) { setIsPorterEmployee(false); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("employees").select("is_porter_employee").eq("name", userName).maybeSingle();
+      if (!cancelled) setIsPorterEmployee(!!(data as { is_porter_employee?: boolean } | null)?.is_porter_employee);
+    })();
+    return () => { cancelled = true; };
+  }, [userName, isEmployee]);
+
+  const hasPorterFullAccess = hasFullAccess || isPorterSupervisor || isPorterEmployee;
 
   // Load suppliers from database
   const loadSuppliers = useCallback(async () => {
@@ -190,6 +229,30 @@ export default function PorterPage() {
       .eq("id", id);
     if (error) { toast("Failed to update access", "error"); return; }
     setSupervisorList((prev) => prev.map((s) => s.id === id ? { ...s, is_porter_supervisor: !current } : s));
+    toast(!current ? "Porter access granted" : "Porter access revoked", "success");
+  };
+
+  // Load employees for porter access management
+  const loadEmployees = useCallback(async () => {
+    if (!hasFullAccess) return;
+    const { data } = await supabase
+      .from("employees")
+      .select("id, name, is_porter_employee")
+      .order("name");
+    if (data) setEmployeeList(data as { id: string; name: string; is_porter_employee: boolean }[]);
+  }, [hasFullAccess]);
+
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  const togglePorterEmployee = async (id: string, current: boolean) => {
+    const { error } = await supabase
+      .from("employees")
+      .update({ is_porter_employee: !current })
+      .eq("id", id);
+    if (error) { toast("Failed to update access", "error"); return; }
+    setEmployeeList((prev) => prev.map((e) => e.id === id ? { ...e, is_porter_employee: !current } : e));
     toast(!current ? "Porter access granted" : "Porter access revoked", "success");
   };
 
@@ -684,40 +747,73 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
             <div className="flex items-center justify-between p-6 pb-4 border-b border-border">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Porter Access</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Grant or revoke porter management access for supervisors.</p>
+                <p className="text-xs text-gray-400 mt-0.5">Grant or revoke porter access for supervisors and employees.</p>
               </div>
               <button onClick={() => setPorterAccessModalOpen(false)}
                 className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-6">
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {supervisorList.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-8">No supervisors found</p>
-                ) : (
-                  supervisorList.map((sv) => (
-                    <div key={sv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-border">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-                          <User className="w-4 h-4 text-purple-500" />
-                        </div>
-                        <span className="text-sm font-medium text-gray-800">{sv.name}</span>
-                      </div>
-                      <button
-                        onClick={() => togglePorterSupervisor(sv.id, sv.is_porter_supervisor)}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
-                          sv.is_porter_supervisor
-                            ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600"
-                            : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"
-                        }`}
-                      >
-                        {sv.is_porter_supervisor ? "Access Granted" : "Grant Access"}
-                      </button>
-                    </div>
-                  ))
-                )}
+            <div className="p-5">
+              {/* Tabs */}
+              <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
+                <button onClick={() => setPorterAccessTab("supervisors")}
+                  className={`flex-1 text-xs font-bold py-2 rounded-lg transition ${porterAccessTab === "supervisors" ? "bg-white text-primary-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                  Supervisors ({supervisorList.length})
+                </button>
+                <button onClick={() => setPorterAccessTab("employees")}
+                  className={`flex-1 text-xs font-bold py-2 rounded-lg transition ${porterAccessTab === "employees" ? "bg-white text-primary-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                  Employees ({employeeList.length})
+                </button>
               </div>
+
+              {/* Supervisors */}
+              {porterAccessTab === "supervisors" && (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {supervisorList.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-8">No supervisors found</p>
+                  ) : (
+                    supervisorList.map((sv) => (
+                      <div key={sv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-border">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                            <User className="w-4 h-4 text-purple-500" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-800">{sv.name}</span>
+                        </div>
+                        <button onClick={() => togglePorterSupervisor(sv.id, sv.is_porter_supervisor)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${sv.is_porter_supervisor ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600" : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"}`}>
+                          {sv.is_porter_supervisor ? "Access Granted" : "Grant Access"}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Employees */}
+              {porterAccessTab === "employees" && (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {employeeList.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-8">No employees found</p>
+                  ) : (
+                    employeeList.map((emp) => (
+                      <div key={emp.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-border">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                            <User className="w-4 h-4 text-blue-500" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-800">{emp.name}</span>
+                        </div>
+                        <button onClick={() => togglePorterEmployee(emp.id, emp.is_porter_employee)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition ${emp.is_porter_employee ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600" : "bg-gray-200 text-gray-500 hover:bg-primary-100 hover:text-primary-700"}`}>
+                          {emp.is_porter_employee ? "Access Granted" : "Grant Access"}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
