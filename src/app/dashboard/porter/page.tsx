@@ -30,16 +30,10 @@ function openPorterWebsite() {
   const isIOS = /iphone|ipad|ipod/i.test(ua);
 
   if (isAndroid) {
-    // Try porter:// deep link — opens app directly if installed
-    // Fall back to Play Store after 1.5s if app is not installed
-    const fallback = setTimeout(() => {
-      window.location.href =
-        "https://play.google.com/store/apps/details?id=com.theporter.android.customerapp";
-    }, 1500);
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clearTimeout(fallback);
-    }, { once: true });
-    window.location.href = "porter://home";
+    // porter.in is registered as an Android App Link by the Porter app.
+    // Chrome will offer "Open with Porter" — if user sets Porter as default once,
+    // it opens directly with no dialog on subsequent taps.
+    window.open("https://porter.in", "_blank", "noopener,noreferrer");
   } else if (isIOS) {
     // Try porter:// scheme; fall back to App Store after 2.5s if not installed
     const timer = setTimeout(() => {
