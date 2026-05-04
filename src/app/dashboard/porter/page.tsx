@@ -30,12 +30,12 @@ function openPorterWebsite() {
   const isIOS = /iphone|ipad|ipod/i.test(ua);
 
   if (isAndroid) {
-    // Try custom scheme; if not installed Chrome falls back to Play Store
+    // Direct intent to open Porter customer app (package: com.theporter.android.customerapp)
     const storeUrl = encodeURIComponent(
-      "https://play.google.com/store/apps/details?id=in.porter.user"
+      "https://play.google.com/store/apps/details?id=com.theporter.android.customerapp"
     );
     window.location.href =
-      `intent://home#Intent;scheme=porter;package=in.porter.user;S.browser_fallback_url=${storeUrl};end`;
+      `intent://#Intent;package=com.theporter.android.customerapp;S.browser_fallback_url=${storeUrl};end`;
   } else if (isIOS) {
     // Try porter:// scheme; fall back to App Store after 2.5s if not installed
     const timer = setTimeout(() => {
@@ -47,7 +47,6 @@ function openPorterWebsite() {
     }, { once: true });
     window.location.href = "porter://home";
   } else {
-    // Desktop: open website
     window.open("https://porter.in", "_blank", "noopener,noreferrer");
   }
 }
