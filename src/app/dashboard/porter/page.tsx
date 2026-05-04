@@ -23,26 +23,20 @@ type Nav = Navigator & {
 
 // ── Suppliers are loaded from the database ────────────────────────────────────
 
-// ── Porter App Redirect ───────────────────────────────────────────────────────
-function openPorterApp() {
-  const ua = navigator.userAgent;
-  const isAndroid = /android/i.test(ua);
-  const isIOS = /iphone|ipad|ipod/i.test(ua);
-
-  if (isAndroid) {
-    const fallbackUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=in.porter.user");
-    window.location.href = `intent://porter.in/#Intent;scheme=https;package=in.porter.user;S.browser_fallback_url=${fallbackUrl};end`;
-  } else if (isIOS) {
-    const fallback = setTimeout(() => {
-      window.location.href = "https://apps.apple.com/in/app/porter-delivery/id1066935012";
-    }, 1500);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") clearTimeout(fallback);
-    }, { once: true });
-    window.location.href = "porter://";
-  } else {
-    window.open("https://porter.in", "_blank", "noopener,noreferrer");
+// ── Porter Share / Open ───────────────────────────────────────────────────────
+// Returns true if native share was used, false if custom dialog should be shown
+async function tryNativeShare(text: string): Promise<boolean> {
+  const url = "https://porter.in";
+  const nav = navigator as Navigator & { share?: (d: object) => Promise<void>; canShare?: (d: object) => boolean };
+  if (nav.share && nav.canShare && nav.canShare({ title: "Porter Booking", text, url })) {
+    try {
+      await nav.share({ title: "Porter Booking", text, url });
+      return true;
+    } catch (err) {
+      if ((err as DOMException).name === "AbortError") return true;
+    }
   }
+  return false;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -95,6 +89,8 @@ export default function PorterPage() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [historySearch, setHistorySearch] = useState("");
+  const [shareText, setShareText] = useState("");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -408,6 +404,14 @@ export default function PorterPage() {
     );
   });
 
+  const handlePorterShare = async (text: string) => {
+    const used = await tryNativeShare(text);
+    if (!used) {
+      setShareText(text);
+      setShareDialogOpen(true);
+    }
+  };
+
   const CREATE_SQL = `CREATE TABLE IF NOT EXISTS porter_bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   supplier_name TEXT,
@@ -542,7 +546,8 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                       onEdit={openEdit}
                       onDelete={handleDelete}
                       onStatusChange={handleStatusChange}
-                      onBook={() => setSummaryBooking(b)} />
+                      onBook={() => setSummaryBooking(b)}
+                      onPorterShare={handlePorterShare} />
                   ))}
             </div>
           </>
@@ -595,12 +600,72 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                       onEdit={openEdit}
                       onDelete={handleDelete}
                       onStatusChange={handleStatusChange}
-                      onBook={() => setSummaryBooking(b)} />
+                      onBook={() => setSummaryBooking(b)}
+                      onPorterShare={handlePorterShare} />
                   ))}
             </div>
           </>
         )}
       </div>
+
+      {/* Share Dialog (desktop fallback) */}
+      {shareDialogOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setShareDialogOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-5 pb-3 border-b border-border">
+              <h2 className="text-base font-bold text-gray-900">Open in App</h2>
+              <button onClick={() => setShareDialogOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-2">
+              {/* WhatsApp */}
+              <a href={`https://wa.me/?text=${encodeURIComponent(shareText + "\n\nhttps://porter.in")}`}
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => setShareDialogOpen(false)}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-green-50 hover:bg-green-100 border border-green-200 transition">
+                <span className="text-2xl">💬</span>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-green-800">WhatsApp</div>
+                  <div className="text-xs text-green-600">Send booking details</div>
+                </div>
+              </a>
+              {/* Telegram */}
+              <a href={`https://t.me/share/url?url=${encodeURIComponent("https://porter.in")}&text=${encodeURIComponent(shareText)}`}
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => setShareDialogOpen(false)}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition">
+                <span className="text-2xl">✈️</span>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-blue-800">Telegram</div>
+                  <div className="text-xs text-blue-600">Send booking details</div>
+                </div>
+              </a>
+              {/* Porter Web */}
+              <a href="https://porter.in" target="_blank" rel="noopener noreferrer"
+                onClick={() => setShareDialogOpen(false)}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-primary-50 hover:bg-primary-100 border border-primary-200 transition">
+                <span className="text-2xl">🚚</span>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-primary-800">Porter App / Website</div>
+                  <div className="text-xs text-primary-600">Open porter.in to book</div>
+                </div>
+              </a>
+              {/* Copy Text */}
+              <button onClick={() => { navigator.clipboard.writeText(shareText + "\n\nhttps://porter.in"); setShareDialogOpen(false); }}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 border border-border transition">
+                <span className="text-2xl">📋</span>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-gray-800">Copy to Clipboard</div>
+                  <div className="text-xs text-gray-500">Paste anywhere</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Porter Access Modal */}
       {porterAccessModalOpen && (
@@ -1045,7 +1110,8 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
       {summaryBooking && (
         <BookingSummaryModal
           booking={summaryBooking}
-          onClose={() => setSummaryBooking(null)} />
+          onClose={() => setSummaryBooking(null)}
+          onPorterShare={handlePorterShare} />
       )}
 
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
@@ -1064,12 +1130,25 @@ interface BookingCardProps {
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: PorterBooking["status"]) => void;
   onBook: () => void;
+  onPorterShare: (text: string) => void;
 }
 
-function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onStatusChange, onBook }: BookingCardProps) {
+function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onStatusChange, onBook, onPorterShare }: BookingCardProps) {
   const currentStep = STATUS_FLOW.indexOf(b.status as typeof STATUS_FLOW[number]);
   const isDone = b.status === "Completed" || b.status === "Cancelled";
   const materials = b.materials ?? [];
+
+  const cardShareText = [
+    b.porter_id ? `Booking ID: ${b.porter_id}` : null,
+    materials.length > 0 ? `Materials: ${materials.join(", ")}` : null,
+    b.approx_weight ? `Weight: ${b.approx_weight}` : null,
+    `Pickup: ${b.pickup_location}`,
+    `Drop: ${b.drop_location}`,
+    b.vehicle_type ? `Vehicle: ${b.vehicle_type}` : null,
+    b.contact ? `Contact: ${b.contact}` : null,
+    `Date: ${b.booking_date}${b.booking_time ? " at " + b.booking_time : ""}`,
+    b.notes ? `Notes: ${b.notes}` : null,
+  ].filter(Boolean).join("\n");
 
   return (
     <div className="bg-white rounded-2xl border border-border p-4 sm:p-5 hover:shadow-md transition-all">
@@ -1158,7 +1237,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
 
       {/* Actions */}
       <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-        <button onClick={onBook}
+        <button onClick={() => onPorterShare(cardShareText)}
           className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg transition">
           <ExternalLink className="w-3 h-3" /> Book via Porter
         </button>
@@ -1211,9 +1290,11 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
 function BookingSummaryModal({
   booking: b,
   onClose,
+  onPorterShare,
 }: {
   booking: PorterBooking;
   onClose: () => void;
+  onPorterShare: (text: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1417,9 +1498,9 @@ function BookingSummaryModal({
             </button>
           </div>
 
-          <button onClick={openPorterApp}
+          <button onClick={() => onPorterShare(summaryText)}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition shadow-sm">
-            <ExternalLink className="w-4 h-4" /> Open Porter App
+            <ExternalLink className="w-4 h-4" /> Book via Porter App
           </button>
 
           <p className="text-[11px] text-gray-400 text-center">
