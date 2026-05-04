@@ -30,12 +30,16 @@ function openPorterWebsite() {
   const isIOS = /iphone|ipad|ipod/i.test(ua);
 
   if (isAndroid) {
-    // Direct intent to open Porter customer app (package: com.theporter.android.customerapp)
-    const storeUrl = encodeURIComponent(
-      "https://play.google.com/store/apps/details?id=com.theporter.android.customerapp"
-    );
-    window.location.href =
-      `intent://#Intent;package=com.theporter.android.customerapp;S.browser_fallback_url=${storeUrl};end`;
+    // Try porter:// deep link — opens app directly if installed
+    // Fall back to Play Store after 1.5s if app is not installed
+    const fallback = setTimeout(() => {
+      window.location.href =
+        "https://play.google.com/store/apps/details?id=com.theporter.android.customerapp";
+    }, 1500);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) clearTimeout(fallback);
+    }, { once: true });
+    window.location.href = "porter://home";
   } else if (isIOS) {
     // Try porter:// scheme; fall back to App Store after 2.5s if not installed
     const timer = setTimeout(() => {
