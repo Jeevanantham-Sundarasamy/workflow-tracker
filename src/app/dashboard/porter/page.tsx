@@ -100,6 +100,7 @@ const emptyForm = {
   booking_time: "",
   notes: "",
   status: "Pending" as PorterBooking["status"],
+  stops: [] as { supplier_id: string; location: string }[],
 };
 
 export default function PorterPage() {
@@ -136,6 +137,16 @@ export default function PorterPage() {
   const fromSupplierRef = useRef<HTMLDivElement>(null);
   const toSupplierRef = useRef<HTMLDivElement>(null);
 
+  // Stop state
+  const [stopSearches, setStopSearches] = useState<string[]>([]);
+  const [stopOpens, setStopOpens] = useState<boolean[]>([]);
+  const stopRef0 = useRef<HTMLDivElement>(null);
+  const stopRef1 = useRef<HTMLDivElement>(null);
+  const stopRef2 = useRef<HTMLDivElement>(null);
+  const stopRef3 = useRef<HTMLDivElement>(null);
+  const stopRef4 = useRef<HTMLDivElement>(null);
+  const stopRefs = [stopRef0, stopRef1, stopRef2, stopRef3, stopRef4];
+
   // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -145,12 +156,18 @@ export default function PorterPage() {
       if (toSupplierRef.current && !toSupplierRef.current.contains(e.target as Node)) {
         setToSupplierOpen(false);
       }
+      stopRefs.forEach((ref, i) => {
+        if (ref.current && !ref.current.contains(e.target as Node)) {
+          setStopOpens((o) => o.map((v, idx) => (idx === i ? false : v)));
+        }
+      });
     };
-    if (fromSupplierOpen || toSupplierOpen) {
+    if (fromSupplierOpen || toSupplierOpen || stopOpens.some(Boolean)) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [fromSupplierOpen, toSupplierOpen]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromSupplierOpen, toSupplierOpen, stopOpens]);
 
   const [isPorterEmployee, setIsPorterEmployee] = useState(false);
 
@@ -340,6 +357,8 @@ export default function PorterPage() {
     setForm(emptyForm);
     setFromSupplierSearch("");
     setToSupplierSearch("");
+    setStopSearches([]);
+    setStopOpens([]);
     setModalOpen(true);
   };
 
@@ -347,6 +366,7 @@ export default function PorterPage() {
     setEditingBooking(b);
     const fromSupplier = suppliers.find((s) => s.name === b.supplier_name);
     const toSupplier = suppliers.find((s) => s.name === b.receiver_name);
+    const existingStops = (b.stop_locations ?? []).filter(Boolean).map((loc) => ({ supplier_id: "", location: loc }));
     setForm({
       materials: b.materials ?? [],
       materialInput: "",
@@ -361,11 +381,48 @@ export default function PorterPage() {
       booking_time: b.booking_time ?? "",
       notes: b.notes ?? "",
       status: b.status,
+      stops: existingStops,
     });
     setFromSupplierSearch(fromSupplier?.name ?? "");
     setToSupplierSearch(toSupplier?.name ?? "");
+    setStopSearches(existingStops.map(() => ""));
+    setStopOpens(existingStops.map(() => false));
     setModalOpen(true);
   };
+
+  const addStop = () => {
+    if (form.stops.length >= 5) return;
+    setForm((f) => ({ ...f, stops: [...f.stops, { supplier_id: "", location: "" }] }));
+    setStopSearches((s) => [...s, ""]);
+    setStopOpens((o) => [...o, false]);
+  };
+
+  const removeStop = (i: number) => {
+    setForm((f) => ({ ...f, stops: f.stops.filter((_, idx) => idx !== i) }));
+    setStopSearches((s) => s.filter((_, idx) => idx !== i));
+    setStopOpens((o) => o.filter((_, idx) => idx !== i));
+  };
+
+  const updateStopSearch = (i: number, val: string) =>
+    setStopSearches((s) => s.map((x, idx) => (idx === i ? val : x)));
+
+  const openStopDropdown = (i: number) =>
+    setStopOpens((o) => o.map((x, idx) => (idx === i ? true : x)));
+
+  const selectStopSupplier = (i: number, s: PorterSupplier) => {
+    setForm((f) => ({
+      ...f,
+      stops: f.stops.map((st, idx) => idx === i ? { supplier_id: s.id, location: s.address } : st),
+    }));
+    updateStopSearch(i, s.name);
+    setStopOpens((o) => o.map((x, idx) => (idx === i ? false : x)));
+  };
+
+  const updateStopLocation = (i: number, val: string) =>
+    setForm((f) => ({
+      ...f,
+      stops: f.stops.map((st, idx) => idx === i ? { ...st, location: val } : st),
+    }));
 
   const addMaterial = () => {
     const val = form.materialInput.trim();
@@ -402,6 +459,7 @@ export default function PorterPage() {
       approx_weight: form.approx_weight.trim() || null,
       pickup_location: form.pickup_location.trim() || (asDraft ? "(draft)" : ""),
       drop_location: form.drop_location.trim() || (asDraft ? "(draft)" : ""),
+      stop_locations: form.stops.map((s) => s.location.trim()).filter(Boolean),
       vehicle_type: (form.vehicle_type || null) as PorterBooking["vehicle_type"] | null,
       contact: form.contact.trim() || null,
       booking_date: form.booking_date,
@@ -1006,10 +1064,16 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 />
                 {fromSupplierOpen && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
-                    {suppliers.filter((s) => s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase())).length === 0 ? (
+                    {suppliers.filter((s) => {
+                      const usedElsewhere = new Set([form.to_supplier_id, ...form.stops.map(st => st.supplier_id)].filter(Boolean));
+                      return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase());
+                    }).length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No suppliers found</div>
                     ) : (
-                      suppliers.filter((s) => s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase())).map((s) => (
+                      suppliers.filter((s) => {
+                        const usedElsewhere = new Set([form.to_supplier_id, ...form.stops.map(st => st.supplier_id)].filter(Boolean));
+                        return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes(fromSupplierSearch.toLowerCase());
+                      }).map((s) => (
                         <button
                           key={s.id}
                           type="button"
@@ -1050,6 +1114,75 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 )}
               </div>
 
+              {/* Stops */}
+              {form.stops.map((stop, i) => (
+                <div key={i} className="relative" ref={stopRefs[i]}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-amber-500" /> Stop {i + 1}
+                      </span>
+                    </label>
+                    <button type="button" onClick={() => removeStop(i)}
+                      className="text-red-400 hover:text-red-600 transition p-0.5 rounded">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={stopSearches[i] ?? ""}
+                    onChange={(e) => updateStopSearch(i, e.target.value)}
+                    onFocus={() => openStopDropdown(i)}
+                    placeholder="Search supplier..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
+                  />
+                  {stopOpens[i] && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+                      {suppliers.filter((s) => {
+                        const usedElsewhere = new Set([form.from_supplier_id, form.to_supplier_id, ...form.stops.filter((_, idx) => idx !== i).map(st => st.supplier_id)].filter(Boolean));
+                        return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes((stopSearches[i] ?? "").toLowerCase());
+                      }).length === 0 ? (
+                        <div className="p-3 text-xs text-gray-400 text-center">No suppliers found</div>
+                      ) : (
+                        suppliers.filter((s) => {
+                          const usedElsewhere = new Set([form.from_supplier_id, form.to_supplier_id, ...form.stops.filter((_, idx) => idx !== i).map(st => st.supplier_id)].filter(Boolean));
+                          return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes((stopSearches[i] ?? "").toLowerCase());
+                        }).map((s) => (
+                          <button key={s.id} type="button"
+                            onClick={() => selectStopSupplier(i, s)}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm font-medium text-gray-700 transition">
+                            {s.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                  {stop.supplier_id && suppliers.find((s) => s.id === stop.supplier_id) && (() => {
+                    const sup = suppliers.find((s) => s.id === stop.supplier_id)!;
+                    return (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                        <div className="text-xs font-semibold text-amber-900">{sup.name}</div>
+                        <div className="text-xs text-amber-700 flex items-center gap-1"><Phone className="w-3 h-3" /> {sup.contact}</div>
+                        <div className="text-xs text-amber-700 flex items-start gap-1"><MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" /><span className="break-words">{sup.address}</span></div>
+                      </div>
+                    );
+                  })()}
+                  <textarea
+                    value={stop.location}
+                    onChange={(e) => updateStopLocation(i, e.target.value)}
+                    placeholder="Stop address..."
+                    rows={2}
+                    className="w-full mt-2 px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none"
+                  />
+                </div>
+              ))}
+              {form.stops.length < 5 && (
+                <button type="button" onClick={addStop}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 text-sm font-semibold transition">
+                  <Plus className="w-4 h-4" /> Add Stop
+                </button>
+              )}
+
               {/* To Supplier */}
               <div className="relative" ref={toSupplierRef}>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
@@ -1065,10 +1198,16 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 />
                 {toSupplierOpen && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
-                    {suppliers.filter((s) => s.name.toLowerCase().includes(toSupplierSearch.toLowerCase())).length === 0 ? (
+                    {suppliers.filter((s) => {
+                      const usedElsewhere = new Set([form.from_supplier_id, ...form.stops.map(st => st.supplier_id)].filter(Boolean));
+                      return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes(toSupplierSearch.toLowerCase());
+                    }).length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No suppliers found</div>
                     ) : (
-                      suppliers.filter((s) => s.name.toLowerCase().includes(toSupplierSearch.toLowerCase())).map((s) => (
+                      suppliers.filter((s) => {
+                        const usedElsewhere = new Set([form.from_supplier_id, ...form.stops.map(st => st.supplier_id)].filter(Boolean));
+                        return !usedElsewhere.has(s.id) && s.name.toLowerCase().includes(toSupplierSearch.toLowerCase());
+                      }).map((s) => (
                         <button
                           key={s.id}
                           type="button"
@@ -1240,11 +1379,13 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
   const isDone = b.status === "Completed" || b.status === "Cancelled";
   const materials = b.materials ?? [];
 
+  const stops = (b.stop_locations ?? []).filter(Boolean);
   const cardShareText = [
     b.porter_id ? `Booking ID: ${b.porter_id}` : null,
     materials.length > 0 ? `Materials: ${materials.join(", ")}` : null,
     b.approx_weight ? `Weight: ${b.approx_weight}` : null,
     `Pickup: ${b.pickup_location}`,
+    ...stops.map((loc, i) => `Stop ${i + 1}: ${loc}`),
     `Drop: ${b.drop_location}`,
     b.vehicle_type ? `Vehicle: ${b.vehicle_type}` : null,
     b.contact ? `Contact: ${b.contact}` : null,
@@ -1288,17 +1429,36 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
       </div>
 
       {/* Route */}
-      <div className="flex items-center gap-2 mb-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-border">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-          <span className="text-xs font-semibold text-gray-700 truncate">{b.pickup_location}</span>
+      {(b.stop_locations ?? []).filter(Boolean).length === 0 ? (
+        <div className="flex items-center gap-2 mb-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-border">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.pickup_location}</span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.drop_location}</span>
+          </div>
         </div>
-        <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-          <span className="text-xs font-semibold text-gray-700 truncate">{b.drop_location}</span>
+      ) : (
+        <div className="mb-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-border space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.pickup_location}</span>
+          </div>
+          {(b.stop_locations ?? []).filter(Boolean).map((loc, i) => (
+            <div key={i} className="flex items-center gap-1.5 pl-0.5">
+              <div className="w-2.5 h-2.5 rounded-full border-2 border-amber-400 flex-shrink-0 ml-0.5" />
+              <span className="text-xs text-amber-700 font-medium truncate">{loc}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.drop_location}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Meta */}
       <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-3">
