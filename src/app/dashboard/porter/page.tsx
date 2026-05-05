@@ -1295,6 +1295,7 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Date *</label>
                   <input value={form.booking_date} type="date"
+                    min={new Date().toLocaleDateString("en-CA")}
                     onChange={(e) => setForm((f) => ({ ...f, booking_date: e.target.value }))}
                     className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>

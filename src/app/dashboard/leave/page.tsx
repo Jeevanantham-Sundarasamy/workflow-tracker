@@ -457,6 +457,7 @@ export default function LeavePage() {
                     From <span className="text-red-400">*</span>
                   </label>
                   <input type="date" value={form.from_date}
+                    min={new Date().toLocaleDateString("en-CA")}
                     onChange={(e) => setForm({ ...form, from_date: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>
@@ -465,6 +466,7 @@ export default function LeavePage() {
                     To <span className="text-red-400">*</span>
                   </label>
                   <input type="date" value={form.to_date}
+                    min={form.from_date || new Date().toLocaleDateString("en-CA")}
                     onChange={(e) => setForm({ ...form, to_date: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>

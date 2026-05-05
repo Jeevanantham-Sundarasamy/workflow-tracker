@@ -333,6 +333,7 @@ export default function TaskModal({
               <input
                 type="date"
                 value={form.due_date}
+                min={new Date().toLocaleDateString("en-CA")}
                 onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
               />
