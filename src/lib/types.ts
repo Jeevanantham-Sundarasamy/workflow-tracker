@@ -225,6 +225,7 @@ export interface PorterBooking {
   booked_by_role: string;
   notes: string | null;
   stop_locations?: string[] | null;
+  stop_supplier_names?: string[] | null;
   created_at: string;
   updated_at: string | null;
 }

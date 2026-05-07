@@ -460,6 +460,7 @@ export default function PorterPage() {
       pickup_location: form.pickup_location.trim() || (asDraft ? "(draft)" : ""),
       drop_location: form.drop_location.trim() || (asDraft ? "(draft)" : ""),
       stop_locations: form.stops.map((s) => s.location.trim()).filter(Boolean),
+      stop_supplier_names: form.stops.map((s) => suppliers.find((sup) => sup.id === s.supplier_id)?.name ?? "").filter(Boolean),
       vehicle_type: (form.vehicle_type || null) as PorterBooking["vehicle_type"] | null,
       contact: form.contact.trim() || null,
       booking_date: form.booking_date,
@@ -561,7 +562,8 @@ export default function PorterPage() {
 ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
 -- Already-created installs:
 -- ALTER TABLE porter_bookings ALTER COLUMN supplier_name DROP NOT NULL;
--- UPDATE supervisors SET is_porter_supervisor = TRUE WHERE pin = '0000';`;
+-- UPDATE supervisors SET is_porter_supervisor = TRUE WHERE pin = '0000';
+-- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS stop_supplier_names TEXT[] DEFAULT '{}';`;
 
   if (tableError) {
     return (
@@ -1434,29 +1436,29 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
         <div className="flex items-center gap-2 mb-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-border">
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
             <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-            <span className="text-xs font-semibold text-gray-700 truncate">{b.pickup_location}</span>
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.supplier_name || b.pickup_location}</span>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
             <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-            <span className="text-xs font-semibold text-gray-700 truncate">{b.drop_location}</span>
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.receiver_name || b.drop_location}</span>
           </div>
         </div>
       ) : (
         <div className="mb-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-border space-y-1.5">
           <div className="flex items-center gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-            <span className="text-xs font-semibold text-gray-700 truncate">{b.pickup_location}</span>
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.supplier_name || b.pickup_location}</span>
           </div>
           {(b.stop_locations ?? []).filter(Boolean).map((loc, i) => (
             <div key={i} className="flex items-center gap-1.5 pl-0.5">
               <div className="w-2.5 h-2.5 rounded-full border-2 border-amber-400 flex-shrink-0 ml-0.5" />
-              <span className="text-xs text-amber-700 font-medium truncate">{loc}</span>
+              <span className="text-xs text-amber-700 font-medium truncate">{(b.stop_supplier_names ?? [])[i] || ""}</span>
             </div>
           ))}
           <div className="flex items-center gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-            <span className="text-xs font-semibold text-gray-700 truncate">{b.drop_location}</span>
+            <span className="text-xs font-semibold text-gray-700 truncate">{b.receiver_name || b.drop_location}</span>
           </div>
         </div>
       )}
