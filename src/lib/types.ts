@@ -226,6 +226,7 @@ export interface PorterBooking {
   notes: string | null;
   stop_locations?: string[] | null;
   stop_supplier_names?: string[] | null;
+  amount: string | null;
   created_at: string;
   updated_at: string | null;
 }

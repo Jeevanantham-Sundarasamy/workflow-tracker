@@ -99,6 +99,7 @@ const emptyForm = {
   booking_date: new Date().toISOString().split("T")[0],
   booking_time: "",
   notes: "",
+  amount: "",
   status: "Pending" as PorterBooking["status"],
   stops: [] as { supplier_id: string; location: string }[],
 };
@@ -380,6 +381,7 @@ export default function PorterPage() {
       booking_date: b.booking_date,
       booking_time: b.booking_time ?? "",
       notes: b.notes ?? "",
+      amount: b.amount ?? "",
       status: b.status,
       stops: existingStops,
     });
@@ -466,6 +468,7 @@ export default function PorterPage() {
       booking_date: form.booking_date,
       booking_time: form.booking_time || null,
       notes: form.notes.trim() || null,
+      amount: form.amount.trim() || null,
       status,
       booked_by: userName || "Unknown",
       booked_by_role: role || "employee",
@@ -563,7 +566,8 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
 -- Already-created installs:
 -- ALTER TABLE porter_bookings ALTER COLUMN supplier_name DROP NOT NULL;
 -- UPDATE supervisors SET is_porter_supervisor = TRUE WHERE pin = '0000';
--- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS stop_supplier_names TEXT[] DEFAULT '{}';`;
+-- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS stop_supplier_names TEXT[] DEFAULT '{}';
+-- ALTER TABLE porter_bookings ADD COLUMN IF NOT EXISTS amount TEXT;`;
 
   if (tableError) {
     return (
@@ -1297,7 +1301,7 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Date *</label>
                   <input value={form.booking_date} type="date"
-                    min={new Date().toLocaleDateString("en-CA")}
+                    min={(() => { const d = new Date(); d.setDate(d.getDate() - (d.getDay() || 7) + 1); return d.toLocaleDateString("en-CA"); })()}
                     onChange={(e) => setForm((f) => ({ ...f, booking_date: e.target.value }))}
                     className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>
@@ -1307,6 +1311,15 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                     onChange={(e) => setForm((f) => ({ ...f, booking_time: e.target.value }))}
                     className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Amount (optional)</label>
+                <input value={form.amount} type="text"
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                  placeholder="e.g. ₹500"
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
               </div>
 
               {/* Status (edit only) */}
@@ -1393,6 +1406,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
     b.vehicle_type ? `Vehicle: ${b.vehicle_type}` : null,
     b.contact ? `Contact: ${b.contact}` : null,
     `Date: ${b.booking_date}${b.booking_time ? " at " + b.booking_time : ""}`,
+    b.amount ? `Amount: ${b.amount}` : null,
     b.notes ? `Notes: ${b.notes}` : null,
   ].filter(Boolean).join("\n");
 
@@ -1468,6 +1482,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
         {b.approx_weight && <span className="flex items-center gap-1.5"><Weight className="w-3.5 h-3.5" /> {b.approx_weight}</span>}
         {b.vehicle_type && <span className="flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> {b.vehicle_type}</span>}
         {b.contact && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {b.contact}</span>}
+        {b.amount && <span className="flex items-center gap-1.5 font-semibold text-green-700">₹ {b.amount}</span>}
         <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {b.booking_date}</span>
         {b.booking_time && <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {b.booking_time}</span>}
         <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {b.booked_by}</span>
@@ -1575,6 +1590,7 @@ function BookingSummaryModal({
     b.vehicle_type ? `Vehicle: ${b.vehicle_type}` : null,
     b.contact ? `Contact: ${b.contact}` : null,
     `Date: ${b.booking_date}${b.booking_time ? " at " + b.booking_time : ""}`,
+    b.amount ? `Amount: ${b.amount}` : null,
     b.notes ? `Notes: ${b.notes}` : null,
   ].filter(Boolean).join("\n");
 
@@ -1731,6 +1747,10 @@ function BookingSummaryModal({
               </>)}
               <div style={{ color: "#6b7280", fontWeight: 600 }}>Date</div>
               <div style={{ color: "#111827" }}>{b.booking_date}{b.booking_time ? ` at ${b.booking_time}` : ""}</div>
+              {b.amount && (<>
+                <div style={{ color: "#6b7280", fontWeight: 600 }}>Amount</div>
+                <div style={{ color: "#16a34a", fontWeight: 700 }}>{b.amount}</div>
+              </>)}
               {b.notes && (<>
                 <div style={{ color: "#6b7280", fontWeight: 600 }}>Notes</div>
                 <div style={{ color: "#111827" }}>{b.notes}</div>
