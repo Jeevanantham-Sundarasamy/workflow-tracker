@@ -103,7 +103,7 @@ export interface UserRole {
 export interface LeaveRequest {
   id: string;
   employee_name: string;
-  leave_type: "Casual" | "Sick" | "Earned" | "Compensatory" | "Other";
+  leave_type: "Casual" | "Sick" | "Earned" | "Compensatory" | "Week Off" | "Other";
   from_date: string;
   to_date: string;
   reason: string;
@@ -115,7 +115,7 @@ export interface LeaveRequest {
 
 export type Role = "guest" | "admin" | "manager" | "supervisor" | "employee";
 
-export const LEAVE_TYPES = ["Casual", "Sick", "Earned", "Compensatory", "Other"] as const;
+export const LEAVE_TYPES = ["Casual", "Sick", "Earned", "Compensatory", "Week Off", "Other"] as const;
 export const LEAVE_STATUSES = ["Pending", "Approved", "Rejected"] as const;
 
 export const STATUSES = ["Pending", "In Progress", "Done", "Delayed", "On Hold", "Cancelled"] as const;
