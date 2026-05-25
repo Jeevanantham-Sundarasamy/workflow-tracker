@@ -2,10 +2,245 @@
 > workflow-tracker@0.1.0 dev
 > next dev
 
+ ⚠ Port 3000 is in use by process 15988, using available port 3002 instead.
    ▲ Next.js 15.5.14
-   - Local:        http://localhost:3000
-   - Network:      http://192.168.1.182:3000
+   - Local:        http://localhost:3002
+   - Network:      http://192.168.1.182:3002
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1809ms
+ ✓ Ready in 1932ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.6s (660 modules)
+ GET / 200 in 2950ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 2.4s (1907 modules)
+ GET /dashboard 200 in 2564ms
+ GET /dashboard 200 in 30ms
+ ○ Compiling /dashboard/porter ...
+ ✓ Compiled /dashboard/porter in 658ms (1938 modules)
+ GET /dashboard/porter 200 in 774ms
+ GET /dashboard/porter 200 in 231ms
+ GET /dashboard/porter 200 in 61ms
+ GET /dashboard/porter 200 in 63ms
+ GET / 200 in 58ms
+ ✓ Compiled /dashboard/tasks in 467ms (1428 modules)
+ GET /dashboard/tasks 200 in 584ms
+ GET /dashboard/porter 200 in 44ms
+ GET /dashboard/porter 200 in 208ms
+ ✓ Compiled in 1047ms (1414 modules)
+ GET /dashboard/porter 200 in 159ms
+ ✓ Compiled in 685ms (1414 modules)
+ GET /dashboard/porter 200 in 127ms
+ GET /dashboard/porter 200 in 260ms
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\7.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\7.pack.gz'
+ ✓ Compiled in 1064ms (1414 modules)
+ ✓ Compiled in 503ms (1414 modules)
+ ✓ Compiled in 795ms (1414 modules)
+ ✓ Compiled in 702ms (1414 modules)
+ ✓ Compiled in 761ms (1414 modules)
+ ✓ Compiled in 435ms (1414 modules)
+ ⨯ ./src/app/dashboard/porter/page.tsx
+Error:   [31mx[0m Expected '</', got 'div'
+     ,-[[36;1;4mD:\RDX Projects\workflow-tracker-main\workflow-tracker-main\src\app\dashboard\porter\page.tsx[0m:541:1]
+ [2m538[0m |                       onBook={() => setSummaryBooking(b)} />
+ [2m539[0m |               ))}
+ [2m540[0m |         </div>
+ [2m541[0m |       </div>
+     : [35;1m        ^^^[0m
+ [2m542[0m | 
+ [2m543[0m |       {/* Supplier Management Modal */}
+ [2m544[0m |       {supplierModalOpen && (
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/dashboard/porter/page.tsx
+ ✓ Compiled in 845ms (1400 modules)
+ ✓ Compiled in 542ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\2.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\2.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 764ms (1414 modules)
+ ✓ Compiled in 502ms (1414 modules)
+ ✓ Compiled in 514ms (1414 modules)
+ ✓ Compiled in 543ms (1414 modules)
+ ✓ Compiled in 384ms (918 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\1.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\1.pack.gz'
+ ✓ Compiled in 1771ms (1414 modules)
+ ✓ Compiled in 618ms (1414 modules)
+ ✓ Compiled in 855ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: EPERM: operation not permitted, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\1.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\1.pack.gz'
+ ✓ Compiled in 934ms (1414 modules)
+ ✓ Compiled in 752ms (1414 modules)
+ ✓ Compiled in 432ms (1414 modules)
+ ✓ Compiled in 599ms (1414 modules)
+ ✓ Compiled in 583ms (1414 modules)
+ ✓ Compiled in 438ms (1414 modules)
+ ✓ Compiled in 381ms (1414 modules)
+ ✓ Compiled in 538ms (1414 modules)
+ ✓ Compiled in 472ms (1414 modules)
+ ✓ Compiled in 811ms (1414 modules)
+ ✓ Compiled in 484ms (1414 modules)
+ ✓ Compiled in 741ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\4.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\4.pack.gz'
+ ✓ Compiled in 787ms (1414 modules)
+ ✓ Compiled in 588ms (1414 modules)
+ ✓ Compiled in 568ms (1414 modules)
+ GET / 200 in 368ms
+ GET / 200 in 45ms
+ ✓ Compiled in 1041ms (1414 modules)
+ ✓ Compiled in 715ms (1414 modules)
+ ✓ Compiled in 652ms (1414 modules)
+ ✓ Compiled in 920ms (1414 modules)
+ ✓ Compiled in 910ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+ ✓ Compiled in 1042ms (1414 modules)
+ ✓ Compiled in 698ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1122ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1534ms (1414 modules)
+ ✓ Compiled in 977ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\8.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\8.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+ ✓ Compiled in 591ms (1414 modules)
+ ✓ Compiled in 595ms (1414 modules)
+ ✓ Compiled in 820ms (1414 modules)
+ ✓ Compiled in 949ms (1414 modules)
+ ✓ Compiled in 825ms (1414 modules)
+ ✓ Compiled in 469ms (1414 modules)
+ ✓ Compiled in 523ms (1414 modules)
+ ✓ Compiled in 431ms (1414 modules)
+ ✓ Compiled in 534ms (1414 modules)
+ ✓ Compiled in 401ms (1414 modules)
+ ✓ Compiled in 434ms (1414 modules)
+ ✓ Compiled in 403ms (1414 modules)
+ ✓ Compiled in 457ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 722ms (1414 modules)
+ ✓ Compiled in 406ms (1414 modules)
+ ✓ Compiled in 629ms (1414 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: EPERM: operation not permitted, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz'
+ ✓ Compiled in 914ms (918 modules)
+ ✓ Compiled in 211ms (918 modules)
+ ✓ Compiled in 464ms (1414 modules)
+ ✓ Compiled in 219ms (918 modules)
+ ✓ Compiled in 208ms (918 modules)
+le or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 722ms (2316 modules)
+ ✓ Compiled in 496ms (2316 modules)
+ ✓ Compiled in 619ms (2316 modules)
+ ✓ Compiled in 792ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz'
+ ✓ Compiled in 1113ms (2316 modules)
+ ✓ Compiled in 605ms (2316 modules)
+ ✓ Compiled in 1026ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\4.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\4.pack.gz'
+ ✓ Compiled in 952ms (2316 modules)
+ ✓ Compiled in 680ms (2316 modules)
+ ✓ Compiled in 621ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz'
+ ✓ Compiled in 1434ms (2316 modules)
+ ✓ Compiled in 737ms (2316 modules)
+ ✓ Compiled in 840ms (2316 modules)
+ ✓ Compiled in 1064ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\7.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\7.pack.gz'
+ ✓ Compiled in 1182ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz'
+ ✓ Compiled in 1005ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 875ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1393ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz'
+ ✓ Compiled in 2.1s (2316 modules)
+ ✓ Compiled in 1281ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\3.pack.gz'
+ ✓ Compiled in 773ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 732ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1146ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 792ms (2321 modules)
+ GET /dashboard/tasks 404 in 1582ms
+ ⨯ [Error: ENOENT: no such file or directory, open 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\server\app\dashboard\tasks\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\RDX Projects\\workflow-tracker-main\\workflow-tracker-main\\.next\\server\\app\\dashboard\\tasks\\page.js',
+  page: '/dashboard/tasks'
+}
+ ⨯ [Error: Cannot find module 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\server\pages\_document.js'
+Require stack:
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\require.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\load-components.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\utils.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\swc\options.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\swc\index.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\config.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\next.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\lib\start-server.js] {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+[Error: ENOENT: no such file or directory, open 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\server\app\dashboard\tasks\page.js'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'D:\\RDX Projects\\workflow-tracker-main\\workflow-tracker-main\\.next\\server\\app\\dashboard\\tasks\\page.js',
+  page: '/dashboard/tasks'
+}
+ ⨯ [Error: Cannot find module 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\server\pages\_document.js'
+Require stack:
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\require.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\load-components.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\utils.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\swc\options.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\swc\index.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\config.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\next.js
+- D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\node_modules\next\dist\server\lib\start-server.js] {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ GET /dashboard/tasks 500 in 193ms
+ GET /dashboard/tasks 500 in 42ms
+ ✓ Compiled in 753ms (2316 modules)
+ ✓ Compiled in 1055ms (2316 modules)
+ ✓ Compiled in 594ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\2.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\2.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 682ms (2316 modules)
+ ✓ Compiled in 603ms (2316 modules)
+ ✓ Compiled in 684ms (2316 modules)
+ ✓ Compiled in 486ms (2316 modules)
+ ✓ Compiled in 537ms (2316 modules)
+ ✓ Compiled in 484ms (2316 modules)
+ ✓ Compiled in 550ms (2316 modules)
+ ✓ Compiled in 1016ms (2316 modules)
+ ✓ Compiled in 560ms (2316 modules)
+ ✓ Compiled in 595ms (2316 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\3.pack.gz'
+ ✓ Compiled in 1059ms (2316 modules)
+ ✓ Compiled in 226ms (1071 modules)
+ ✓ Compiled in 533ms (2316 modules)
+ ✓ Compiled in 247ms (1071 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\4.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\server-development\4.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz_' -> 'D:\RDX Projects\workflow-tracker-main\workflow-tracker-main\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 226ms (1071 modules)
