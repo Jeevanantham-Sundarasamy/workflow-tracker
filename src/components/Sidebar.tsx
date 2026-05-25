@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Workflow,
   Truck,
+  FileBarChart2,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
@@ -31,6 +32,7 @@ const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; 
   { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },
+  { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2, access: "not_employee" },
   { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "admin_only" },
 ];
 

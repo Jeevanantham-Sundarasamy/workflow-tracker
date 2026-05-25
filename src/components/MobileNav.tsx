@@ -15,6 +15,7 @@ import {
   Workflow,
   BarChart3,
   Truck,
+  FileBarChart2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
@@ -41,6 +42,7 @@ const moreItems: NavItem[] = [
   { label: "Customers", href: "/dashboard/customers", icon: Building2, access: "not_employee" },
   { label: "Production", href: "/dashboard/production", icon: Workflow, access: "logged_in" },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },
+  { label: "Reports", href: "/dashboard/reports", icon: FileBarChart2, access: "not_employee" },
   { label: "Settings", href: "/dashboard/settings", icon: Settings, access: "admin_only" },
 ];
 

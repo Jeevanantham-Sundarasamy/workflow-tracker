@@ -12,6 +12,8 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.49.1",
     "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
