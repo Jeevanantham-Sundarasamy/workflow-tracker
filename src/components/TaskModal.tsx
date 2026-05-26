@@ -100,6 +100,10 @@ export default function TaskModal({
       alert("Please select a supervisor to assign the task.");
       return;
     }
+    if (filteredEmployees.length > 0 && !form.assigned_to) {
+      alert("Please assign the task to an employee.");
+      return;
+    }
     const basePayload = {
       ...form,
       follow_up: form.follow_up || null,
@@ -240,18 +244,18 @@ export default function TaskModal({
             </div>
           </div>
 
-          {/* Assign to Employee (optional) */}
+          {/* Assign to Employee (required) */}
           {filteredEmployees.length > 0 && (
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                Assign to Employee <span className="normal-case text-gray-300">(optional)</span>
+                Assign to Employee <span className="text-red-500">*</span>
               </label>
               <select
                 value={form.assigned_to}
                 onChange={(e) => setForm({ ...form, assigned_to: e.target.value, assigned_to_type: e.target.value ? "employee" : "supervisor" })}
                 className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
               >
-                <option value="">Supervisor only</option>
+                <option value="">Select employee...</option>
                 {filteredEmployees.map((e) => (
                   <option key={e.name} value={e.name}>{e.name}</option>
                 ))}
