@@ -21,14 +21,14 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
-type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee";
+type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee" | "supervisor_only";
 
 const allNavItems: { label: string; href: string; icon: typeof LayoutDashboard; access: Access }[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: "logged_in" },
   { label: "Tasks", href: "/dashboard/tasks", icon: ClipboardList, access: "all" },
   { label: "Porter Booking", href: "/dashboard/porter", icon: Truck, access: "logged_in" },
   { label: "Team", href: "/dashboard/team", icon: Users, access: "full_access" },
-  { label: "Employees", href: "/dashboard/employees", icon: UserCheck, access: "not_employee" },
+  { label: "Employees", href: "/dashboard/employees", icon: UserCheck, access: "supervisor_only" },
   { label: "Customers", href: "/dashboard/customers", icon: Building2, access: "not_employee" },
   { label: "Production", href: "/dashboard/production", icon: Workflow, access: "logged_in" },
   { label: "Leave", href: "/dashboard/leave", icon: Palmtree, access: "all" },
@@ -49,6 +49,7 @@ export default function Sidebar() {
     if (item.access === "admin_only") return isAdmin;
     if (item.access === "full_access") return hasFullAccess;
     if (item.access === "not_employee") return hasFullAccess || isSupervisor;
+    if (item.access === "supervisor_only") return isSupervisor;
     return false;
   });
 

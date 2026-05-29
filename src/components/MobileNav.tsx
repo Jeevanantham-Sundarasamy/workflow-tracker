@@ -21,7 +21,7 @@ import {
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
-type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee";
+type Access = "all" | "logged_in" | "admin_only" | "full_access" | "not_employee" | "supervisor_only";
 
 interface NavItem {
   label: string;
@@ -40,7 +40,7 @@ const moreItems: NavItem[] = [
   { label: "Porter", href: "/dashboard/porter", icon: Truck, access: "logged_in" },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays, access: "not_employee" },
   { label: "Team", href: "/dashboard/team", icon: Users, access: "full_access" },
-  { label: "Employees", href: "/dashboard/employees", icon: UserCheck, access: "not_employee" },
+  { label: "Employees", href: "/dashboard/employees", icon: UserCheck, access: "supervisor_only" },
   { label: "Customers", href: "/dashboard/customers", icon: Building2, access: "not_employee" },
   { label: "Production", href: "/dashboard/production", icon: Workflow, access: "logged_in" },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: "not_employee" },
@@ -59,6 +59,7 @@ export default function MobileNav() {
     if (access === "admin_only") return isAdmin;
     if (access === "full_access") return hasFullAccess;
     if (access === "not_employee") return hasFullAccess || isSupervisor;
+    if (access === "supervisor_only") return isSupervisor;
     return false;
   };
 
