@@ -73,6 +73,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadPin();
   }, [loadPin]);
 
+  // Refresh can_create_task from DB on every load so changes take effect without re-login
+  useEffect(() => {
+    if (!loaded || role !== "employee" || !userName) return;
+    supabase
+      .from("employees")
+      .select("can_create_task")
+      .eq("name", userName)
+      .single()
+      .then(({ data }: { data: { can_create_task: boolean } | null }) => {
+        if (data) {
+          const cct = !!data.can_create_task;
+          setHasTaskCreateAccess(cct);
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved?.startsWith("employee:")) {
+            const updated = saved.replace(/\|cct:[01]/, "") + `|cct:${cct ? "1" : "0"}`;
+            localStorage.setItem(STORAGE_KEY, updated);
+          }
+        }
+      });
+  }, [loaded, role, userName]);
+
   // Load from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
