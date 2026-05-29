@@ -358,8 +358,8 @@ export default function EmployeesPage() {
                     </div>
                   )}
 
-                  {/* Task Create Access toggle */}
-                  {canManage && (
+                  {/* Task Create Access toggle — supervisors only */}
+                  {isSupervisor && (
                     <button
                       onClick={() => toggleTaskAccess(emp.id, !!emp.can_create_task)}
                       className={`mt-2 w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition ${
