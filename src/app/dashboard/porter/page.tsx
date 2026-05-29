@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import type { PorterBooking, PorterSupplier } from "@/lib/types";
+import type { PorterBooking, PorterSupplier, Task } from "@/lib/types";
 import { PORTER_STATUSES, VEHICLE_TYPES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
@@ -137,6 +137,9 @@ export default function PorterPage() {
   const [toSupplierOpen, setToSupplierOpen] = useState(false);
   const fromSupplierRef = useRef<HTMLDivElement>(null);
   const toSupplierRef = useRef<HTMLDivElement>(null);
+  const taskIdRef = useRef<string | null>(null);
+  const requestedByRef = useRef<string | null>(null);
+  const [myRequests, setMyRequests] = useState<Task[]>([]);
 
   // Stop state
   const [stopSearches, setStopSearches] = useState<string[]>([]);
@@ -222,6 +225,68 @@ export default function PorterPage() {
   useEffect(() => {
     loadSuppliers();
   }, [loadSuppliers]);
+
+  // Pre-fill booking form from task "Book Porter" conversion
+  useEffect(() => {
+    if (suppliers.length === 0) return; // wait for suppliers to load
+    const raw = sessionStorage.getItem("porter_booking_prefill");
+    if (!raw) return;
+    sessionStorage.removeItem("porter_booking_prefill");
+    try {
+      const p = JSON.parse(raw) as {
+        materials: string[];
+        pickup: string;
+        drop: string;
+        vehicle: string;
+        weight: string;
+        supplierName: string;
+        receiverName: string;
+        notes: string;
+        taskId?: string | null;
+        requestedBy?: string | null;
+      };
+      taskIdRef.current = p.taskId || null;
+      requestedByRef.current = p.requestedBy || null;
+      const fromSupplier = suppliers.find((s) => s.name === p.supplierName);
+      const toSupplier = suppliers.find((s) => s.name === p.receiverName);
+      setForm({
+        ...emptyForm,
+        materials: p.materials,
+        pickup_location: p.pickup,
+        drop_location: p.drop,
+        vehicle_type: (VEHICLE_TYPES.includes(p.vehicle as typeof VEHICLE_TYPES[number]) ? p.vehicle : "") as PorterBooking["vehicle_type"] | "",
+        approx_weight: p.weight,
+        notes: p.notes,
+        from_supplier_id: fromSupplier?.id ?? "",
+        to_supplier_id: toSupplier?.id ?? "",
+      });
+      setFromSupplierSearch(fromSupplier?.name ?? p.supplierName);
+      setToSupplierSearch(toSupplier?.name ?? p.receiverName);
+      setEditingBooking(null);
+      setModalOpen(true);
+    } catch {
+      // ignore malformed prefill
+    }
+  }, [suppliers]);
+
+  // Load pending porter requests (tasks) for non-porter-access users
+  const loadMyRequests = useCallback(async () => {
+    if (hasPorterFullAccess || !userName) { setMyRequests([]); return; }
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("created_by", userName)
+      .like("task", "Porter Booking%")
+      .like("location_gps", "porter_request_group:%")
+      .order("created_at", { ascending: false });
+    setMyRequests((data as Task[]) || []);
+  }, [hasPorterFullAccess, userName]);
+
+  useEffect(() => {
+    loadMyRequests();
+    const interval = setInterval(loadMyRequests, 5000);
+    return () => clearInterval(interval);
+  }, [loadMyRequests]);
 
   // Load supervisors for porter access management (managers/admins only)
   const loadSupervisors = useCallback(async () => {
@@ -340,12 +405,15 @@ export default function PorterPage() {
     }
 
     let list = (data as PorterBooking[]) || [];
-    if (isEmployee && !hasFullAccess && !isSupervisor && !isPorterSupervisor) {
-      list = list.filter((b) => b.booked_by === userName);
+    if (!hasPorterFullAccess) {
+      list = list.filter((b) =>
+        b.booked_by === userName ||
+        (b.notes && b.notes.includes(`[req:${userName}]`))
+      );
     }
     setBookings(list);
     setLoading(false);
-  }, [hasFullAccess, isSupervisor, isEmployee, isPorterSupervisor, userName, toast]);
+  }, [hasPorterFullAccess, userName, toast]);
 
   useEffect(() => {
     loadBookings();
@@ -436,7 +504,163 @@ export default function PorterPage() {
   const removeMaterial = (m: string) =>
     setForm((f) => ({ ...f, materials: f.materials.filter((x) => x !== m) }));
 
+  // Create a porter REQUEST — only tasks, no porter_bookings row, for non-porter users
+  const handleCreateRequest = async () => {
+    if (form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date) {
+      toast("Fill at least one Material, Pickup & Drop locations", "error");
+      return;
+    }
+    setSaving(true);
+
+    const requestGroupId = `porter_request_group:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fromSupplier = suppliers.find((s) => s.id === form.from_supplier_id);
+    const toSupplier = suppliers.find((s) => s.id === form.to_supplier_id);
+
+    const taskDescription = [
+      "Porter Booking",
+      form.materials.length > 0 ? `Materials: ${form.materials.join(", ")}` : null,
+      `From: ${form.pickup_location.trim()}`,
+      ...form.stops.map((s) => s.location.trim()).filter(Boolean).map((loc, i) => `Stop ${i + 1}: ${loc}`),
+      `To: ${form.drop_location.trim()}`,
+      form.vehicle_type ? `Vehicle: ${form.vehicle_type}` : null,
+    ].filter(Boolean).join(" | ");
+
+    const followUp = [
+      form.notes.trim() || null,
+      form.approx_weight.trim() ? `Weight: ${form.approx_weight.trim()}` : null,
+      fromSupplier ? `Supplier: ${fromSupplier.name}` : null,
+      toSupplier ? `Receiver: ${toSupplier.name}` : null,
+      form.amount.trim() ? `Amount: ₹${form.amount.trim()}` : null,
+      form.booking_time ? `Time: ${form.booking_time}` : null,
+    ].filter(Boolean).join(" | ") || null;
+
+    let supervisorName = userName || "Unknown";
+    if (isEmployee && userName) {
+      const { data: empData } = await supabase.from("employees").select("supervisor_names").eq("name", userName).maybeSingle();
+      const supNames = (empData as { supervisor_names?: string[] | null } | null)?.supervisor_names;
+      if (supNames && supNames.length > 0) supervisorName = supNames[0];
+    }
+
+    const [{ data: porterSups }, { data: porterEmps }] = await Promise.all([
+      supabase.from("supervisors").select("name").eq("is_porter_supervisor", true),
+      supabase.from("employees").select("name").eq("is_porter_employee", true),
+    ]);
+
+    const persons: { name: string; type: "supervisor" | "employee" }[] = [
+      ...(porterSups || []).map((s: { name: string }) => ({ name: s.name, type: "supervisor" as const })),
+      ...(porterEmps || []).map((e: { name: string }) => ({ name: e.name, type: "employee" as const })),
+    ];
+
+    if (persons.length === 0) {
+      toast("No porter access person found. Ask your manager to assign porter access.", "error");
+      setSaving(false);
+      return;
+    }
+
+    const tasks = persons.map(({ name, type }) => ({
+      task: taskDescription,
+      supervisor: supervisorName,
+      priority: "Medium" as const,
+      due_date: form.booking_date,
+      status: "Pending" as const,
+      follow_up: followUp,
+      location_gps: requestGroupId,
+      assigned_to: name,
+      assigned_to_type: type,
+      assigned_by: userName || "Unknown",
+      created_by: userName || "Unknown",
+    }));
+
+    const { error } = await supabase.from("tasks").insert(tasks);
+    if (error) {
+      toast(`Request failed: ${error.message}`, "error");
+    } else {
+      toast("Porter request sent successfully", "success");
+      setModalOpen(false);
+      setForm({ ...emptyForm });
+      setFromSupplierSearch("");
+      setToSupplierSearch("");
+      setStopSearches([]);
+      setStopOpens([]);
+      await loadMyRequests();
+    }
+    setSaving(false);
+  };
+
+  const autoCreatePorterTasks = async (booking: PorterBooking) => {
+    try {
+      // Determine supervisor name for the tasks
+      let supervisorName = userName || "Admin";
+      if (isEmployee && userName) {
+        const { data: empData } = await supabase
+          .from("employees")
+          .select("supervisor_names")
+          .eq("name", userName)
+          .maybeSingle();
+        const supNames = (empData as { supervisor_names?: string[] | null } | null)?.supervisor_names;
+        if (supNames && supNames.length > 0) supervisorName = supNames[0];
+      }
+
+      // Fetch all porter-access persons
+      const [{ data: porterSups }, { data: porterEmps }] = await Promise.all([
+        supabase.from("supervisors").select("name").eq("is_porter_supervisor", true),
+        supabase.from("employees").select("name").eq("is_porter_employee", true),
+      ]);
+
+      const taskDescription = [
+        `Porter Booking`,
+        booking.materials.length > 0 ? `Materials: ${booking.materials.join(", ")}` : null,
+        `From: ${booking.pickup_location}`,
+        `To: ${booking.drop_location}`,
+        booking.vehicle_type ? `Vehicle: ${booking.vehicle_type}` : null,
+      ].filter(Boolean).join(" | ");
+
+      const followUp = [
+        booking.notes,
+        booking.approx_weight ? `Weight: ${booking.approx_weight}` : null,
+        booking.supplier_name ? `Supplier: ${booking.supplier_name}` : null,
+        booking.receiver_name ? `Receiver: ${booking.receiver_name}` : null,
+      ].filter(Boolean).join(" | ") || null;
+
+      const persons: { name: string; type: "supervisor" | "employee" }[] = [
+        ...(porterSups || []).map((s: { name: string }) => ({ name: s.name, type: "supervisor" as const })),
+        ...(porterEmps || []).map((e: { name: string }) => ({ name: e.name, type: "employee" as const })),
+      ];
+
+      if (persons.length === 0) return;
+
+      const tasks = persons.map(({ name, type }) => ({
+        task: taskDescription,
+        supervisor: supervisorName,
+        priority: "Medium" as const,
+        due_date: booking.booking_date,
+        status: "Pending" as const,
+        follow_up: followUp,
+        location_gps: `porter_booking_id:${booking.id}`,
+        assigned_to: name,
+        assigned_to_type: type,
+        assigned_by: userName || "Admin",
+        created_by: userName || "Admin",
+      }));
+
+      const { error } = await supabase.from("tasks").insert(tasks);
+      if (error) {
+        toast(`Porter tasks creation failed: ${error.message}`, "error");
+      } else {
+        toast(`${tasks.length} porter task${tasks.length > 1 ? "s" : ""} created`, "success");
+      }
+    } catch (err) {
+      console.error("autoCreatePorterTasks error:", err);
+    }
+  };
+
   const handleSave = async (asDraft = false) => {
+    // Non-porter-access users create requests (tasks) instead of actual bookings
+    if (!hasPorterFullAccess && !editingBooking) {
+      await handleCreateRequest();
+      return;
+    }
+
     if (!asDraft) {
       if (form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date) {
         toast("Fill at least one Material, Pickup & Drop locations", "error");
@@ -453,6 +677,10 @@ export default function PorterPage() {
     const status: PorterBooking["status"] = asDraft ? "Draft" : (form.status === "Draft" ? "Pending" : form.status);
     const fromSupplier = suppliers.find((s) => s.id === form.from_supplier_id);
     const toSupplier = suppliers.find((s) => s.id === form.to_supplier_id);
+    const tId = taskIdRef.current;
+    const reqBy = requestedByRef.current;
+    const rawNotes = form.notes.trim() || null;
+    const notesWithReq = reqBy ? `[req:${reqBy}]${rawNotes ? " " + rawNotes : ""}` : rawNotes;
 
     const payload = {
       materials: form.materials,
@@ -467,7 +695,7 @@ export default function PorterPage() {
       contact: form.contact.trim() || null,
       booking_date: form.booking_date,
       booking_time: form.booking_time || null,
-      notes: form.notes.trim() || null,
+      notes: notesWithReq,
       amount: form.amount.trim() || null,
       status,
       booked_by: userName || "Unknown",
@@ -489,7 +717,24 @@ export default function PorterPage() {
       else {
         toast(asDraft ? "Draft saved" : "Booking created", "success");
         await loadBookings();
-        if (!asDraft) setSummaryBooking(created as PorterBooking);
+        if (!asDraft) {
+          setSummaryBooking(created as PorterBooking);
+          if (tId) {
+            // Booking created from a porter request task — link all tasks in the request group
+            taskIdRef.current = null;
+            requestedByRef.current = null;
+            const { data: srcTask } = await supabase.from("tasks").select("location_gps").eq("id", tId).single();
+            const groupId = (srcTask as { location_gps?: string | null } | null)?.location_gps;
+            if (groupId?.startsWith("porter_request_group:")) {
+              await supabase.from("tasks").update({ location_gps: `porter_booking_id:${(created as PorterBooking).id}` }).eq("location_gps", groupId);
+            } else {
+              await supabase.from("tasks").update({ location_gps: `porter_booking_id:${(created as PorterBooking).id}` }).eq("id", tId);
+            }
+          } else {
+            // Direct booking by porter person — auto-create tasks for notification
+            await autoCreatePorterTasks(created as PorterBooking);
+          }
+        }
       }
     }
 
@@ -500,14 +745,26 @@ export default function PorterPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this porter booking?")) return;
     const { error } = await supabase.from("porter_bookings").delete().eq("id", id);
-    if (error) toast("Failed to delete", "error");
-    else { setBookings((p) => p.filter((b) => b.id !== id)); toast("Booking deleted", "success"); }
+    if (error) { toast("Failed to delete", "error"); return; }
+    // Delete auto-created porter tasks linked to this booking
+    await supabase.from("tasks").delete().eq("location_gps", `porter_booking_id:${id}`);
+    setBookings((p) => p.filter((b) => b.id !== id));
+    toast("Booking deleted", "success");
   };
 
   const handleStatusChange = async (id: string, status: PorterBooking["status"]) => {
     const { error } = await supabase.from("porter_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
-    if (error) toast("Failed to update status", "error");
-    else { setBookings((p) => p.map((b) => b.id === id ? { ...b, status } : b)); toast("Status updated", "success"); }
+    if (error) { toast("Failed to update status", "error"); return; }
+    setBookings((p) => p.map((b) => b.id === id ? { ...b, status } : b));
+    toast("Status updated", "success");
+    // Auto-complete or cancel porter tasks linked to this booking
+    if (status === "Completed" || status === "Cancelled") {
+      const taskStatus = status === "Completed" ? "Done" : "Cancelled";
+      const completedAt = status === "Completed" ? new Date().toISOString() : null;
+      await supabase.from("tasks")
+        .update({ status: taskStatus, completed_at: completedAt })
+        .eq("location_gps", `porter_booking_id:${id}`);
+    }
   };
 
   const canCreate = hasFullAccess || isSupervisor || isEmployee;
@@ -623,7 +880,7 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
             {canCreate && (
               <button onClick={openCreate}
                 className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
-                <Plus className="w-4 h-4" /> New Booking
+                <Plus className="w-4 h-4" /> {hasPorterFullAccess ? "New Booking" : "Request Porter"}
               </button>
             )}
           </div>
@@ -683,6 +940,49 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                       onPorterShare={handlePorterShare} />
                   ))}
             </div>
+
+            {/* Pending Requests (non-porter users only) */}
+            {!hasPorterFullAccess && myRequests.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide px-1">Awaiting Porter</h3>
+                {myRequests.map((req) => {
+                  const parts = req.task.split(" | ");
+                  const materials = parts.find(p => p.startsWith("Materials: "))?.replace("Materials: ", "") || "";
+                  const from = parts.find(p => p.startsWith("From: "))?.replace("From: ", "") || "";
+                  const to = parts.find(p => p.startsWith("To: "))?.replace("To: ", "") || "";
+                  return (
+                    <div key={req.id} className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex flex-wrap gap-1">
+                          {materials.split(", ").filter(Boolean).map((m) => (
+                            <span key={m} className="text-[11px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{m}</span>
+                          ))}
+                        </div>
+                        <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-300">Awaiting Porter</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-amber-100 text-xs text-gray-600">
+                        <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                        <span className="truncate font-medium">{from}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                        <span className="truncate font-medium">{to}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                        <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {req.due_date}</span>
+                        <button onClick={async () => {
+                          if (!confirm("Cancel this porter request?")) return;
+                          await supabase.from("tasks").delete().eq("location_gps", req.location_gps!);
+                          await loadMyRequests();
+                          toast("Request cancelled", "success");
+                        }} className="ml-auto text-[11px] font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition">
+                          Cancel Request
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
 
@@ -1407,7 +1707,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
     b.contact ? `Contact: ${b.contact}` : null,
     `Date: ${b.booking_date}${b.booking_time ? " at " + b.booking_time : ""}`,
     b.amount ? `Amount: ${b.amount}` : null,
-    b.notes ? `Notes: ${b.notes}` : null,
+    b.notes ? `Notes: ${b.notes.replace(/\[(linked_to|req):[^\]]+\]\s*/g, "").trim()}` : null,
   ].filter(Boolean).join("\n");
 
   return (
@@ -1488,9 +1788,7 @@ function BookingCard({ booking: b, canManage, canDelete, onEdit, onDelete, onSta
         <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {b.booked_by}</span>
       </div>
 
-      {b.notes && (
-        <div className="text-xs text-gray-400 italic bg-gray-50 rounded-xl px-3 py-2 mb-3 border border-border">{b.notes}</div>
-      )}
+      {b.notes && (() => { const n = b.notes.replace(/\[(linked_to|req):[^\]]+\]\s*/g, "").trim(); return n ? <div className="text-xs text-gray-400 italic bg-gray-50 rounded-xl px-3 py-2 mb-3 border border-border">{n}</div> : null; })()}
 
       {/* Progress stepper */}
       {!isDone && (
@@ -1591,7 +1889,7 @@ function BookingSummaryModal({
     b.contact ? `Contact: ${b.contact}` : null,
     `Date: ${b.booking_date}${b.booking_time ? " at " + b.booking_time : ""}`,
     b.amount ? `Amount: ${b.amount}` : null,
-    b.notes ? `Notes: ${b.notes}` : null,
+    b.notes ? `Notes: ${b.notes.replace(/\[(linked_to|req):[^\]]+\]\s*/g, "").trim()}` : null,
   ].filter(Boolean).join("\n");
 
   const handleCopy = async () => {

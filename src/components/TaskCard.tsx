@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X, Share2 } from "lucide-react";
+import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X, Share2, Truck } from "lucide-react";
 import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
@@ -16,6 +16,7 @@ interface TaskCardProps {
   onDelete: (id: string) => void;
   onViewDetail?: (task: Task) => void;
   onShare?: (task: Task) => void;
+  onConvertToPorterBooking?: (task: Task) => void;
   selectable?: boolean;
   selected?: boolean;
   onSelect?: (id: string) => void;
@@ -47,6 +48,7 @@ function TaskCard({
   onDelete,
   onViewDetail,
   onShare,
+  onConvertToPorterBooking,
   selectable,
   selected,
   onSelect,
@@ -185,6 +187,12 @@ function TaskCard({
         )}
 
         <div className="flex items-center gap-2 ml-auto">
+          {onConvertToPorterBooking && task.task.startsWith("Porter Booking") && (
+            <button onClick={() => onConvertToPorterBooking(task)}
+              className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition">
+              <Truck className="w-3 h-3" /> Book Porter
+            </button>
+          )}
           {onViewDetail && (
             <button onClick={() => onViewDetail(task)}
               className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition">

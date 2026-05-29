@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useRealtime } from "@/lib/useRealtime";
 import { logActivity, createNotification } from "@/lib/activity";
@@ -18,6 +19,7 @@ import { Plus, Search, CheckSquare, Share2, X as XIcon } from "lucide-react";
 
 export default function TasksPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const { hasFullAccess, isSupervisor, isEmployee, userName, role, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
@@ -40,6 +42,39 @@ export default function TasksPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareTasks, setShareTasks] = useState<Task[]>([]);
+
+  const handleConvertToPorterBooking = (task: Task) => {
+    const parts = task.task.split(" | ");
+    let materials: string[] = [];
+    let pickup = "";
+    let drop = "";
+    let vehicle = "";
+    for (const part of parts.slice(1)) {
+      if (part.startsWith("Materials: ")) materials = part.replace("Materials: ", "").split(", ").filter(Boolean);
+      else if (part.startsWith("From: ")) pickup = part.replace("From: ", "");
+      else if (part.startsWith("To: ")) drop = part.replace("To: ", "");
+      else if (part.startsWith("Vehicle: ")) vehicle = part.replace("Vehicle: ", "");
+    }
+    let weight = "";
+    let supplierName = "";
+    let receiverName = "";
+    let notes = "";
+    if (task.follow_up) {
+      const fpParts = task.follow_up.split(" | ");
+      for (const part of fpParts) {
+        if (part.startsWith("Weight: ")) weight = part.replace("Weight: ", "");
+        else if (part.startsWith("Supplier: ")) supplierName = part.replace("Supplier: ", "");
+        else if (part.startsWith("Receiver: ")) receiverName = part.replace("Receiver: ", "");
+        else if (part && !notes) notes = part;
+      }
+    }
+    sessionStorage.setItem("porter_booking_prefill", JSON.stringify({
+      materials, pickup, drop, vehicle, weight, supplierName, receiverName, notes,
+      taskId: task.id,
+      requestedBy: task.created_by,
+    }));
+    router.push("/dashboard/porter");
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -159,6 +194,22 @@ export default function TasksPage() {
       await createNotification(`"${task.task}" status → ${status}`, "info", id, statusRecipients);
       if (comment) {
         await supabase.from("comments").insert({ task_id: id, author: actor, message: `[Status → ${status}] ${comment}` });
+      }
+      // Sync status back to linked porter booking
+      if (task.location_gps?.startsWith("porter_booking_id:")) {
+        const bookingId = task.location_gps.replace("porter_booking_id:", "");
+        const bookingStatusMap: Partial<Record<Task["status"], string>> = {
+          "In Progress": "In Transit",
+          "Done": "Completed",
+          "Cancelled": "Cancelled",
+          "Pending": "Pending",
+        };
+        const bookingStatus = bookingStatusMap[status as Task["status"]];
+        if (bookingStatus) {
+          await supabase.from("porter_bookings")
+            .update({ status: bookingStatus, updated_at: new Date().toISOString() })
+            .eq("id", bookingId);
+        }
       }
     }
   };
@@ -296,10 +347,11 @@ export default function TasksPage() {
         </div>
         <div className="space-y-3">
           {loading ? [...Array(3)].map((_, i) => <TaskCardSkeleton key={i} />) :
-            filtered.length ? filtered.map((t) => (
-              <TaskCard key={t.id} task={t}
-                canEdit={canEditTask && !selectMode}
-                canDelete={canDeleteTask && !selectMode}
+            filtered.length ? filtered.map((t) => {
+              const isMyPorterTask = t.task.startsWith("Porter Booking") && t.assigned_to === userName;
+              return <TaskCard key={t.id} task={t}
+                canEdit={(canEditTask || isMyPorterTask) && !selectMode}
+                canDelete={(canDeleteTask || isMyPorterTask) && !selectMode}
                 canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!))))}
                 onStatusChange={handleStatusChange}
                 onPriorityChange={canEditTask && !selectMode ? handlePriorityChange : undefined}
@@ -307,10 +359,11 @@ export default function TasksPage() {
                 onDelete={handleDelete}
                 onViewDetail={!selectMode ? (task) => setDetailTask(task) : undefined}
                 onShare={!selectMode ? (task) => setShareTasks([task]) : undefined}
+                onConvertToPorterBooking={!selectMode && t.task.startsWith("Porter Booking") ? handleConvertToPorterBooking : undefined}
                 selectable={selectMode}
                 selected={selectedIds.has(t.id)}
-                onSelect={toggleSelect} />
-            )) : (
+                onSelect={toggleSelect} />;
+            }) : (
               <div className="bg-white rounded-2xl border border-border p-16 text-center">
                 <p className="text-4xl mb-3">📭</p><p className="text-sm text-gray-400 font-medium">No tasks found</p></div>
             )}
