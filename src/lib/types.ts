@@ -53,6 +53,7 @@ export interface Employee {
   designation: string | null;
   department: string | null;
   created_at: string;
+  can_create_task?: boolean;
 }
 
 export interface Notification {

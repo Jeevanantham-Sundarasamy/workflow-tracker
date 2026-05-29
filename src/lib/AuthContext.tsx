@@ -16,6 +16,8 @@ interface AuthContextType {
   isLoggedIn: boolean;
   /** Admin or Manager — has full access */
   hasFullAccess: boolean;
+  /** Employee granted task-creation access by their supervisor */
+  hasTaskCreateAccess: boolean;
   userName: string | null;
   supervisorName: string | null;
   department: string | null;
@@ -32,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   isEmployee: false,
   isLoggedIn: false,
   hasFullAccess: false,
+  hasTaskCreateAccess: false,
   userName: null,
   supervisorName: null,
   department: null,
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userName, setUserName] = useState<string | null>(null);
   const [supervisorName, setSupervisorName] = useState<string | null>(null);
   const [department, setDepartment] = useState<string | null>(null);
+  const [hasTaskCreateAccess, setHasTaskCreateAccess] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [dbPin, setDbPin] = useState<string | null>(null);
 
@@ -89,10 +93,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else if (saved?.startsWith("employee:")) {
       const parts = saved.replace("employee:", "").split("|sup:");
       const supParts = (parts[1] || "").split("|dept:");
+      const deptAndCct = supParts[1] || "";
+      const deptParts = deptAndCct.split("|cct:");
       setRole("employee");
       setUserName(parts[0]);
       setSupervisorName(supParts[0] || null);
-      setDepartment(supParts[1] || null);
+      setDepartment(deptParts[0] || null);
+      setHasTaskCreateAccess(deptParts[1] === "1");
     }
     setLoaded(true);
   }, []);
@@ -105,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserName("Admin");
       setSupervisorName(null);
       setDepartment(null);
+      setHasTaskCreateAccess(false);
       localStorage.setItem(STORAGE_KEY, "admin");
       return true;
     }
@@ -121,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserName(mgr.name);
         setSupervisorName(null);
         setDepartment(mgr.department || null);
+        setHasTaskCreateAccess(false);
         localStorage.setItem(STORAGE_KEY, `manager:${mgr.name}|dept:${mgr.department || ""}`);
         return true;
       }
@@ -140,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserName(sup.name);
         setSupervisorName(sup.name);
         setDepartment(sup.department || null);
+        setHasTaskCreateAccess(false);
         localStorage.setItem(STORAGE_KEY, `supervisor:${sup.name}|dept:${sup.department || ""}`);
         return true;
       }
@@ -151,16 +161,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data: empAll } = await supabase
         .from("employees")
-        .select("name, pin, supervisor_name, department");
+        .select("name, pin, supervisor_name, department, can_create_task");
       if (empAll && empAll.length > 0) {
         const emp = empAll.find((e: { pin: string | null }) => e.pin === pin);
         if (emp) {
           const supNames = emp.supervisor_name ? String(emp.supervisor_name).split(",").map((n: string) => n.trim()).filter(Boolean) : [];
+          const cct = !!emp.can_create_task;
           setRole("employee");
           setUserName(emp.name);
           setSupervisorName(supNames[0] || null);
           setDepartment(emp.department || null);
-          localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}`);
+          setHasTaskCreateAccess(cct);
+          localStorage.setItem(STORAGE_KEY, `employee:${emp.name}|sup:${supNames.join(",")}|dept:${emp.department || ""}|cct:${cct ? "1" : "0"}`);
           return true;
         }
       }
@@ -176,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserName(null);
     setSupervisorName(null);
     setDepartment(null);
+    setHasTaskCreateAccess(false);
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -189,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasFullAccess = isAdmin || isManager;
 
   return (
-    <AuthContext.Provider value={{ role, isAdmin, isManager, isSupervisor, isEmployee, isLoggedIn, hasFullAccess, userName, supervisorName, department, login, logout, refreshPin: loadPin }}>
+    <AuthContext.Provider value={{ role, isAdmin, isManager, isSupervisor, isEmployee, isLoggedIn, hasFullAccess, hasTaskCreateAccess, userName, supervisorName, department, login, logout, refreshPin: loadPin }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,7 @@ import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
-import { Plus, Trash2, Users, Key, Eye, EyeOff, Search, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Users, Key, Eye, EyeOff, Search, Pencil, Check, X, ClipboardList } from "lucide-react";
 import LoginRequired from "@/components/LoginRequired";
 import { checkPinUsed } from "@/lib/pinUtils";
 
@@ -150,6 +150,14 @@ export default function EmployeesPage() {
       setEmployees((p) => p.map((e) => e.id === id ? { ...e, name, designation: dbUpdates.designation, phone: dbUpdates.phone, supervisor_names: editEmpSupervisors.length > 0 ? editEmpSupervisors : null, department: dbUpdates.department } : e).sort((a, b) => a.name.localeCompare(b.name)));
       setEditingEmp(null);
       toast("Employee updated", "success");
+    } else toast("Failed to update", "error");
+  };
+
+  const toggleTaskAccess = async (id: string, current: boolean) => {
+    const { error } = await supabase.from("employees").update({ can_create_task: !current }).eq("id", id);
+    if (!error) {
+      setEmployees((p) => p.map((e) => e.id === id ? { ...e, can_create_task: !current } : e));
+      toast(!current ? "Task creation access granted" : "Task creation access revoked", "success");
     } else toast("Failed to update", "error");
   };
 
@@ -348,6 +356,27 @@ export default function EmployeesPage() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {/* Task Create Access toggle */}
+                  {canManage && (
+                    <button
+                      onClick={() => toggleTaskAccess(emp.id, !!emp.can_create_task)}
+                      className={`mt-2 w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition ${
+                        emp.can_create_task
+                          ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                          : "bg-gray-50 text-gray-400 border-border hover:bg-gray-100 hover:text-gray-600"
+                      }`}>
+                      <span className="flex items-center gap-1.5">
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Task Creation Access
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        emp.can_create_task ? "bg-violet-200 text-violet-800" : "bg-gray-200 text-gray-500"
+                      }`}>
+                        {emp.can_create_task ? "Granted" : "Restricted"}
+                      </span>
+                    </button>
                   )}
                     </>
                   )}

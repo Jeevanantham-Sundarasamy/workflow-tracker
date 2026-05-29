@@ -20,7 +20,7 @@ import { Plus, Search, CheckSquare, Share2, X as XIcon } from "lucide-react";
 export default function TasksPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const { hasFullAccess, isSupervisor, isEmployee, userName, role, login } = useAuth();
+  const { hasFullAccess, isSupervisor, isEmployee, hasTaskCreateAccess, userName, role, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [supervisors, setSupervisors] = useState<string[]>([]);
   const [managers, setManagers] = useState<string[]>([]);
@@ -119,7 +119,7 @@ export default function TasksPage() {
   const roleFiltered = tasks.filter((t) => {
     if (hasFullAccess) return true;
     if (isSupervisor) return t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!);
-    if (isEmployee) return t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!);
+    if (isEmployee) return t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!) || (hasTaskCreateAccess && t.created_by === userName);
     return true; // guest sees all
   });
 
@@ -151,10 +151,10 @@ export default function TasksPage() {
     return (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4);
   });
 
-  const canCreateTask = hasFullAccess || isSupervisor;
+  const canCreateTask = hasFullAccess || isSupervisor || hasTaskCreateAccess;
   const canEditTask = hasFullAccess || isSupervisor;
   const canDeleteTask = hasFullAccess;
-  const canSelectMultiple = hasFullAccess || isSupervisor;
+  const canSelectMultiple = hasFullAccess || isSupervisor || hasTaskCreateAccess;
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -256,7 +256,7 @@ export default function TasksPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">
-              {isEmployee ? "My Tasks" : isSupervisor ? "Team Tasks" : "All Tasks"}
+              {isEmployee && !hasTaskCreateAccess ? "My Tasks" : isSupervisor ? "Team Tasks" : "All Tasks"}
             </h1>
             <p className="text-sm text-gray-400">{roleFiltered.length} total</p>
           </div>
@@ -305,12 +305,12 @@ export default function TasksPage() {
               Completed
             </button>
           </div>
-          {!isEmployee && (
+          {(!isEmployee || hasTaskCreateAccess) && (
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
               className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Supervisors</option>{supervisors.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           )}
-          {!isEmployee && (
+          {(!isEmployee || hasTaskCreateAccess) && (
             <select value={filterEmp} onChange={(e) => setFilterEmp(e.target.value)}
               className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
               <option value="All">All Employees</option>
@@ -349,12 +349,13 @@ export default function TasksPage() {
           {loading ? [...Array(3)].map((_, i) => <TaskCardSkeleton key={i} />) :
             filtered.length ? filtered.map((t) => {
               const isMyPorterTask = t.task.startsWith("Porter Booking") && t.assigned_to === userName;
+              const isMyCreatedTask = hasTaskCreateAccess && t.created_by === userName;
               return <TaskCard key={t.id} task={t}
-                canEdit={(canEditTask || isMyPorterTask) && !selectMode}
-                canDelete={(canDeleteTask || isMyPorterTask) && !selectMode}
-                canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!))))}
+                canEdit={(canEditTask || isMyPorterTask || isMyCreatedTask) && !selectMode}
+                canDelete={(canDeleteTask || isMyPorterTask || isMyCreatedTask) && !selectMode}
+                canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!) || isMyCreatedTask)))}
                 onStatusChange={handleStatusChange}
-                onPriorityChange={canEditTask && !selectMode ? handlePriorityChange : undefined}
+                onPriorityChange={(canEditTask || isMyCreatedTask) && !selectMode ? handlePriorityChange : undefined}
                 onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
                 onDelete={handleDelete}
                 onViewDetail={!selectMode ? (task) => setDetailTask(task) : undefined}
