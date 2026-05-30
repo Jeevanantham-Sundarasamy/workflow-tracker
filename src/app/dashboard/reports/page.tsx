@@ -84,6 +84,8 @@ export default function ReportsPage() {
   const { hasFullAccess, isSupervisor, isEmployee, userName, login } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [commentsByTask, setCommentsByTask] = useState<Record<string, Comment[]>>({});
+  const [allEmployees, setAllEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
+  const [allSupervisors, setAllSupervisors] = useState<string[]>([]);
   const [fetching, setFetching] = useState(false);
   const [reportType, setReportType] = useState<ReportType>("daily");
   const [customFrom, setCustomFrom] = useState("");
@@ -96,11 +98,15 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchData = async () => {
       setFetching(true);
-      const [{ data: taskData }, { data: commentData }] = await Promise.all([
+      const [{ data: taskData }, { data: commentData }, { data: empData }, { data: supData }] = await Promise.all([
         supabase.from("tasks").select("*").order("due_date", { ascending: true }),
         supabase.from("comments").select("*").order("created_at", { ascending: false }),
+        supabase.from("employees").select("name, supervisor_name").order("name"),
+        supabase.from("supervisors").select("name").order("name"),
       ]);
       setTasks(taskData || []);
+      setAllEmployees((empData || []) as { name: string; supervisor_name: string | null }[]);
+      setAllSupervisors(((supData || []) as { name: string }[]).map(s => s.name));
       const grouped: Record<string, Comment[]> = {};
       for (const c of (commentData || []) as Comment[]) {
         if (!grouped[c.task_id]) grouped[c.task_id] = [];
@@ -151,15 +157,39 @@ export default function ReportsPage() {
     return parts.join(" | ");
   };
 
-  // Group tasks by assignee, sorted by status priority within each group
+  // Group tasks by assignee — expand extra_assignees so each person gets their tasks
   const groupedReport = (() => {
     if (!reportData) return [];
     const map: Record<string, { tasks: Task[]; supervisor: string }> = {};
+
     for (const t of reportData) {
-      const name = t.assigned_to || t.supervisor;
-      if (!map[name]) map[name] = { tasks: [], supervisor: t.supervisor };
-      map[name].tasks.push(t);
+      const assignees: string[] = [];
+      if (t.assigned_to) assignees.push(t.assigned_to);
+      if (t.extra_assignees?.length) assignees.push(...t.extra_assignees);
+      if (assignees.length === 0) assignees.push(t.supervisor);
+      for (const name of assignees) {
+        if (!map[name]) map[name] = { tasks: [], supervisor: t.supervisor };
+        map[name].tasks.push(t);
+      }
     }
+
+    // Include employees/supervisors with zero tasks in this period
+    const relevantPeople: string[] = hasFullAccess
+      ? [...allEmployees.map(e => e.name), ...allSupervisors]
+      : isSupervisor
+        ? allEmployees
+            .filter(e => (e.supervisor_name || "").split(",").map(s => s.trim()).includes(userName!))
+            .map(e => e.name)
+        : [];
+
+    for (const person of relevantPeople) {
+      if (!map[person]) {
+        const empRecord = allEmployees.find(e => e.name === person);
+        const supName = empRecord?.supervisor_name?.split(",")[0]?.trim() || (isSupervisor ? userName! : "");
+        map[person] = { tasks: [], supervisor: supName };
+      }
+    }
+
     return Object.entries(map)
       .map(([name, { tasks, supervisor }]) => ({
         name,
@@ -334,6 +364,17 @@ export default function ReportsPage() {
       // ── Task rows ──
       const groupStartRow = dataRowNum + 1;
 
+      if (group.tasks.length === 0) {
+        dataRowNum++;
+        const emptyRow = ws.addRow(["", group.name, "", "No tasks in this period", "", "", "", "", ""]);
+        ws.mergeCells(`C${dataRowNum}:I${dataRowNum}`);
+        emptyRow.eachCell((cell, colNum) => {
+          cell.font = { italic: true, size: 9, color: { argb: "FF9CA3AF" } };
+          cell.border = cellBorder;
+          if (colNum === 2) cell.font = { bold: true, size: 9, color: { argb: "FF374151" } };
+        });
+      }
+
       group.tasks.forEach((t, idx) => {
         dataRowNum++;
         const ds = getDisplayStatus(t);
@@ -464,7 +505,7 @@ export default function ReportsPage() {
       // Employees with <3 tasks share a page; ≥3 tasks get their own page.
       // Estimate height: 25mm overhead (header + col-header) + 10mm per task row.
       const PDF_USABLE_H = 175; // mm available per non-title page
-      const estH = (g: typeof groupedReport[0]) => 25 + g.tasks.length * 10;
+      const estH = (g: typeof groupedReport[0]) => g.tasks.length === 0 ? 10 : 25 + g.tasks.length * 10;
 
       type Bucket = typeof groupedReport;
       const pageBuckets: Bucket[] = [];
@@ -493,7 +534,6 @@ export default function ReportsPage() {
         const onHoldCount = group.tasks.filter((t) => t.status === "On Hold").length;
         const overdueCount = group.tasks.filter((t) => isOverdue(t)).length;
 
-        // Employee section header bar
         // ── Compact employee header (7mm tall) ──
         doc.setFillColor(235, 237, 255);
         doc.rect(14, startY, pageW - 28, 7, "F");
@@ -504,13 +544,18 @@ export default function ReportsPage() {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7);
         doc.setTextColor(90, 90, 90);
-        const detail = [
-          `Supervisor: ${group.supervisor}`,
-          `${done}/${total} Done`,
-          onHoldCount  ? `On Hold: ${onHoldCount}`  : "",
-          overdueCount ? `Overdue: ${overdueCount}` : "",
-        ].filter(Boolean).join("  |  ");
+        const detail = total === 0
+          ? `Supervisor: ${group.supervisor}  |  No tasks in this period`
+          : [
+              `Supervisor: ${group.supervisor}`,
+              `${done}/${total} Done`,
+              onHoldCount  ? `On Hold: ${onHoldCount}`  : "",
+              overdueCount ? `Overdue: ${overdueCount}` : "",
+            ].filter(Boolean).join("  |  ");
         doc.text(safe(detail), 65, startY + 5);
+
+        // Zero-task employee — just the header bar, no table
+        if (total === 0) return startY + 7;
 
         const tableRows = group.tasks.map((t, i) => [
           i + 1,
@@ -725,8 +770,9 @@ export default function ReportsPage() {
                   {" · "}{reportData.length} task{reportData.length !== 1 ? "s" : ""}
                   {" · "}{groupedReport.length} employee{groupedReport.length !== 1 ? "s" : ""}
                 </p>
+
               </div>
-              {reportData.length > 0 && (
+              {groupedReport.length > 0 && (
                 <div className="ml-auto flex gap-2 flex-wrap">
                   <button
                     onClick={downloadExcel}
@@ -748,11 +794,11 @@ export default function ReportsPage() {
             </div>
 
             {/* Report — grouped by employee */}
-            <div ref={tableRef} className="space-y-4">
-              {reportData.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-border p-16 text-center">
+            <div ref={tableRef} className="space-y-3">
+              {groupedReport.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-border p-12 text-center">
                   <p className="text-4xl mb-3">📭</p>
-                  <p className="text-sm text-gray-400 font-medium">No tasks found for this period</p>
+                  <p className="text-sm text-gray-400 font-medium">No data found for this period</p>
                   <p className="text-xs text-gray-300 mt-1">Try a different date range</p>
                 </div>
               ) : (
@@ -762,108 +808,85 @@ export default function ReportsPage() {
                   const onHoldCount = group.tasks.filter((t) => t.status === "On Hold").length;
                   const overdueCount = group.tasks.filter((t) => isOverdue(t)).length;
                   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                  const isEmpty = total === 0;
 
                   return (
-                    <div key={group.name} className="bg-white rounded-2xl border border-border overflow-hidden">
-                      {/* Employee header */}
-                      <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-border">
-                        <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                          <User className="w-4 h-4 text-primary-600" />
+                    <div key={group.name} className="bg-white rounded-xl border border-border overflow-hidden">
+                      {/* Employee header — compact single line */}
+                      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-border">
+                        <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                          <User className="w-3.5 h-3.5 text-primary-600" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-gray-900">{group.name}</span>
-                            <span className="text-xs text-gray-400">· {group.supervisor}</span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-24 bg-gray-200 rounded-full h-1.5">
-                                <div
-                                  className={`h-1.5 rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : "bg-yellow-400"}`}
-                                  style={{ width: `${pct}%` }}
-                                />
+                        <span className="text-xs font-bold text-gray-900">{group.name}</span>
+                        {group.supervisor && <span className="text-[10px] text-gray-400">· {group.supervisor}</span>}
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          {!isEmpty && (
+                            <>
+                              <div className="w-20 bg-gray-200 rounded-full h-1">
+                                <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : "bg-yellow-400"}`} style={{ width: `${pct}%` }} />
                               </div>
-                              <span className="text-[11px] font-semibold text-gray-500">{done}/{total} done</span>
-                            </div>
-                            {onHoldCount > 0 && (
-                              <span className="text-[11px] font-semibold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">{onHoldCount} on hold</span>
-                            )}
-                            {overdueCount > 0 && (
-                              <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{overdueCount} overdue</span>
-                            )}
-                          </div>
+                              <span className="text-[10px] font-semibold text-gray-500">{done}/{total}</span>
+                            </>
+                          )}
+                          {onHoldCount > 0 && <span className="text-[10px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">{onHoldCount} hold</span>}
+                          {overdueCount > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{overdueCount} overdue</span>}
+                          {isEmpty && <span className="text-[10px] font-semibold text-gray-400 italic">No tasks</span>}
                         </div>
                       </div>
 
-                      {/* Tasks table */}
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm min-w-[900px]">
-                          <thead>
-                            <tr className="border-b border-border/50">
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-8">#</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Task</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-28">Status</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Notes / Reason</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-28">Due Date</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-20">Priority</th>
-                              <th className="text-left px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-28">Done %</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {group.tasks.map((t, idx) => {
-                              const ds = getDisplayStatus(t);
-                              const pct = getCompletionPct(t.status);
-                              const notes = getTaskNotes(t);
-                              return (
-                                <tr
-                                  key={t.id}
-                                  className={`${STATUS_LEFT_BORDER[ds] || ""} border-b border-border/40 hover:bg-gray-50/60 transition`}
-                                >
-                                  <td className="px-4 py-3 text-xs text-gray-400 font-medium align-top">{idx + 1}</td>
-                                  <td className="px-4 py-3 align-top max-w-[220px]">
-                                    <p className="text-sm text-gray-800 font-medium leading-snug">{t.task}</p>
-                                  </td>
-                                  <td className="px-4 py-3 align-top">
-                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold ${STATUS_BADGE[ds] || "bg-gray-100 text-gray-600"}`}>
-                                      {ds}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 align-top max-w-[220px]">
-                                    {notes ? (
-                                      <p className="text-xs text-gray-600 leading-relaxed">{notes}</p>
-                                    ) : (
-                                      <span className="text-xs text-gray-300">—</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 align-top">
-                                    <span className={`text-xs ${isOverdue(t) ? "text-red-600 font-semibold" : "text-gray-500"}`}>
-                                      {formatDate(t.due_date)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 align-top">
-                                    <span className={`text-xs ${PRIORITY_COLOR[t.priority] || "text-gray-600"}`}>
-                                      {t.priority}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 align-top">
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex-1 bg-gray-200 rounded-full h-1.5 w-16">
-                                        <div
-                                          className={`h-1.5 rounded-full transition-all ${
-                                            pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct > 0 ? "bg-yellow-400" : "bg-gray-300"
-                                          }`}
-                                          style={{ width: `${pct}%` }}
-                                        />
+                      {/* Tasks table — compact rows */}
+                      {!isEmpty && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs min-w-[800px]">
+                            <thead>
+                              <tr className="border-b border-border/50 bg-white">
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-6">#</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Task</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Status</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Notes / Reason</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Due Date</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-16">Priority</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Done %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.tasks.map((t, idx) => {
+                                const ds = getDisplayStatus(t);
+                                const pct = getCompletionPct(t.status);
+                                const notes = getTaskNotes(t);
+                                return (
+                                  <tr key={t.id + group.name} className={`${STATUS_LEFT_BORDER[ds] || ""} border-b border-border/30 hover:bg-gray-50/50 transition`}>
+                                    <td className="px-3 py-2 text-[10px] text-gray-400 align-top">{idx + 1}</td>
+                                    <td className="px-3 py-2 align-top max-w-[200px]">
+                                      <p className="text-xs text-gray-800 font-medium leading-snug">{t.task}</p>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[ds] || "bg-gray-100 text-gray-600"}`}>{ds}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top max-w-[200px]">
+                                      {notes ? <p className="text-[11px] text-gray-500 leading-relaxed">{notes}</p> : <span className="text-[11px] text-gray-300">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`text-[11px] ${isOverdue(t) ? "text-red-600 font-semibold" : "text-gray-500"}`}>{formatDate(t.due_date)}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`text-[11px] ${PRIORITY_COLOR[t.priority] || "text-gray-600"}`}>{t.priority}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="bg-gray-200 rounded-full h-1 w-14">
+                                          <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct > 0 ? "bg-yellow-400" : "bg-gray-300"}`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                        <span className="text-[11px] font-semibold text-gray-600">{pct}%</span>
                                       </div>
-                                      <span className="text-xs font-semibold text-gray-600">{pct}%</span>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   );
                 })
