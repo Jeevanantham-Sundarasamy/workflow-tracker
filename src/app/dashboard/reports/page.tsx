@@ -337,7 +337,10 @@ export default function ReportsPage() {
 
     let dataRowNum = 5; // header is row 5 (1-indexed in excel)
 
-    for (const group of groupedReport) {
+    const groupsWithTasks = groupedReport.filter(g => g.tasks.length > 0);
+    const groupsNoTasks   = groupedReport.filter(g => g.tasks.length === 0);
+
+    for (const group of groupsWithTasks) {
       // ── Employee header row ──
       dataRowNum++;
       const empRow = ws.addRow([
@@ -443,6 +446,28 @@ export default function ReportsPage() {
       ws.addRow([]);
     }
 
+    // ── No-task employees — single combined section ──
+    if (groupsNoTasks.length > 0) {
+      dataRowNum++;
+      const noTaskHeaderRow = ws.addRow(["", `No Tasks Assigned (${groupsNoTasks.length})`, "", "", "", "", "", "", ""]);
+      ws.mergeCells(`B${dataRowNum}:I${dataRowNum}`);
+      noTaskHeaderRow.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+        cell.font = { bold: true, size: 9, color: { argb: "FF6B7280" } };
+        cell.alignment = { vertical: "middle" };
+        cell.border = cellBorder;
+      });
+      const names = groupsNoTasks.map(g => g.supervisor ? `${g.name} (${g.supervisor})` : g.name).join(",  ");
+      dataRowNum++;
+      const noTaskRow = ws.addRow(["", names, "", "", "", "", "", "", ""]);
+      ws.mergeCells(`B${dataRowNum}:I${dataRowNum}`);
+      noTaskRow.eachCell((cell) => {
+        cell.font = { italic: true, size: 9, color: { argb: "FF9CA3AF" } };
+        cell.border = cellBorder;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    }
+
     // ── Write & download ──
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -501,18 +526,20 @@ export default function ReportsPage() {
         );
       }
 
-      // ── Pre-bucket groups into pages ──
-      // Employees with <3 tasks share a page; ≥3 tasks get their own page.
-      // Estimate height: 25mm overhead (header + col-header) + 10mm per task row.
-      const PDF_USABLE_H = 175; // mm available per non-title page
-      const estH = (g: typeof groupedReport[0]) => g.tasks.length === 0 ? 10 : 25 + g.tasks.length * 10;
+      // ── Separate groups with/without tasks ──
+      const pdfWithTasks = groupedReport.filter(g => g.tasks.length > 0);
+      const pdfNoTasks   = groupedReport.filter(g => g.tasks.length === 0);
+
+      // ── Pre-bucket groups with tasks into pages ──
+      const PDF_USABLE_H = 175;
+      const estH = (g: typeof groupedReport[0]) => 25 + g.tasks.length * 10;
 
       type Bucket = typeof groupedReport;
       const pageBuckets: Bucket[] = [];
       let smallBucket: Bucket = [];
       let smallBucketH = 0;
 
-      for (const group of groupedReport) {
+      for (const group of pdfWithTasks) {
         if (group.tasks.length > 4) {
           if (smallBucket.length > 0) { pageBuckets.push([...smallBucket]); smallBucket = []; smallBucketH = 0; }
           pageBuckets.push([group]);
@@ -632,9 +659,30 @@ export default function ReportsPage() {
       pageBuckets.forEach((bucket, bi) => {
         if (bi > 0) { doc.addPage(); currentY = 14; }
         for (const group of bucket) {
-          currentY = drawGroup(group, currentY) + 5; // 5mm gap between groups on shared page
+          currentY = drawGroup(group, currentY) + 5;
         }
       });
+
+      // ── No-task employees — single combined section ──
+      if (pdfNoTasks.length > 0) {
+        // Start on new page if current page is crowded
+        if (currentY > PDF_USABLE_H - 30) { doc.addPage(); currentY = 14; }
+        // Header bar
+        doc.setFillColor(243, 244, 246);
+        doc.rect(14, currentY, pageW - 28, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`No Tasks Assigned — ${pdfNoTasks.length} employee${pdfNoTasks.length !== 1 ? "s" : ""}`, 17, currentY + 5);
+        currentY += 9;
+        // Names in a wrapped list
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
+        const nameList = pdfNoTasks.map(g => g.supervisor ? `${g.name} (${g.supervisor})` : g.name).join("   |   ");
+        const lines = doc.splitTextToSize(safe(nameList), pageW - 28);
+        doc.text(lines, 17, currentY + 4);
+      }
 
       // Page numbers footer
       const pageCount = doc.getNumberOfPages();
@@ -794,6 +842,10 @@ export default function ReportsPage() {
             </div>
 
             {/* Report — grouped by employee */}
+            {(() => {
+              const withTasks = groupedReport.filter(g => g.tasks.length > 0);
+              const noTasks   = groupedReport.filter(g => g.tasks.length === 0);
+              return (
             <div ref={tableRef} className="space-y-3">
               {groupedReport.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-border p-12 text-center">
@@ -802,13 +854,13 @@ export default function ReportsPage() {
                   <p className="text-xs text-gray-300 mt-1">Try a different date range</p>
                 </div>
               ) : (
-                groupedReport.map((group) => {
+                <>
+                {withTasks.map((group) => {
                   const done = group.tasks.filter((t) => t.status === "Done").length;
                   const total = group.tasks.length;
                   const onHoldCount = group.tasks.filter((t) => t.status === "On Hold").length;
                   const overdueCount = group.tasks.filter((t) => isOverdue(t)).length;
                   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                  const isEmpty = total === 0;
 
                   return (
                     <div key={group.name} className="bg-white rounded-xl border border-border overflow-hidden">
@@ -820,22 +872,17 @@ export default function ReportsPage() {
                         <span className="text-xs font-bold text-gray-900">{group.name}</span>
                         {group.supervisor && <span className="text-[10px] text-gray-400">· {group.supervisor}</span>}
                         <div className="flex items-center gap-1.5 ml-auto">
-                          {!isEmpty && (
-                            <>
-                              <div className="w-20 bg-gray-200 rounded-full h-1">
-                                <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : "bg-yellow-400"}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <span className="text-[10px] font-semibold text-gray-500">{done}/{total}</span>
-                            </>
-                          )}
+                          <div className="w-20 bg-gray-200 rounded-full h-1">
+                            <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : "bg-yellow-400"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[10px] font-semibold text-gray-500">{done}/{total}</span>
                           {onHoldCount > 0 && <span className="text-[10px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">{onHoldCount} hold</span>}
                           {overdueCount > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{overdueCount} overdue</span>}
-                          {isEmpty && <span className="text-[10px] font-semibold text-gray-400 italic">No tasks</span>}
                         </div>
                       </div>
 
                       {/* Tasks table — compact rows */}
-                      {!isEmpty && (
+                      {(
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs min-w-[800px]">
                             <thead>
@@ -889,9 +936,30 @@ export default function ReportsPage() {
                       )}
                     </div>
                   );
-                })
+                })}
+
+                {/* Single combined card for all no-task employees */}
+                {noTasks.length > 0 && (
+                  <div className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-border">
+                      <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <span className="text-xs font-bold text-gray-500">No Tasks Assigned</span>
+                      <span className="text-[10px] text-gray-400 ml-1">— {noTasks.length} employee{noTasks.length !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2">
+                      {noTasks.map(g => (
+                        <span key={g.name} className="text-[11px] text-gray-500 py-0.5">
+                          <span className="font-semibold text-gray-700">{g.name}</span>
+                          {g.supervisor && <span className="text-gray-400"> · {g.supervisor}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
+            );})()}
           </>
         )}
       </div>
