@@ -140,6 +140,7 @@ export default function PorterPage() {
   const taskIdRef = useRef<string | null>(null);
   const requestedByRef = useRef<string | null>(null);
   const [myRequests, setMyRequests] = useState<Task[]>([]);
+  const [allPorterRequests, setAllPorterRequests] = useState<Task[]>([]);
 
   // Stop state
   const [stopSearches, setStopSearches] = useState<string[]>([]);
@@ -282,11 +283,29 @@ export default function PorterPage() {
     setMyRequests((data as Task[]) || []);
   }, [hasPorterFullAccess, userName]);
 
+  // Load ALL pending porter requests for porter-access users (so they can book them)
+  const loadAllPorterRequests = useCallback(async () => {
+    if (!hasPorterFullAccess || !userName) { setAllPorterRequests([]); return; }
+    const { data } = await supabase
+      .from("tasks")
+      .select("*")
+      .like("task", "Porter Booking%")
+      .like("location_gps", "porter_request_group:%")
+      .order("created_at", { ascending: false });
+    setAllPorterRequests((data as Task[]) || []);
+  }, [hasPorterFullAccess, userName]);
+
   useEffect(() => {
     loadMyRequests();
     const interval = setInterval(loadMyRequests, 5000);
     return () => clearInterval(interval);
   }, [loadMyRequests]);
+
+  useEffect(() => {
+    loadAllPorterRequests();
+    const interval = setInterval(loadAllPorterRequests, 5000);
+    return () => clearInterval(interval);
+  }, [loadAllPorterRequests]);
 
   // Load supervisors for porter access management (managers/admins only)
   const loadSupervisors = useCallback(async () => {
@@ -420,6 +439,54 @@ export default function PorterPage() {
     const interval = setInterval(loadBookings, 5000);
     return () => clearInterval(interval);
   }, [loadBookings]);
+
+  const handleBookFromRequest = (req: Task) => {
+    const parts = req.task.split(" | ");
+    let materials: string[] = [];
+    let pickup = "";
+    let drop = "";
+    let vehicle = "";
+    for (const part of parts.slice(1)) {
+      if (part.startsWith("Materials: ")) materials = part.replace("Materials: ", "").split(", ").filter(Boolean);
+      else if (part.startsWith("From: ")) pickup = part.replace("From: ", "");
+      else if (part.startsWith("To: ")) drop = part.replace("To: ", "");
+      else if (part.startsWith("Vehicle: ")) vehicle = part.replace("Vehicle: ", "");
+    }
+    let weight = "";
+    let supplierName = "";
+    let receiverName = "";
+    let notes = "";
+    if (req.follow_up) {
+      const fpParts = req.follow_up.split(" | ");
+      for (const part of fpParts) {
+        if (part.startsWith("Weight: ")) weight = part.replace("Weight: ", "");
+        else if (part.startsWith("Supplier: ")) supplierName = part.replace("Supplier: ", "");
+        else if (part.startsWith("Receiver: ")) receiverName = part.replace("Receiver: ", "");
+        else if (part && !notes) notes = part;
+      }
+    }
+    taskIdRef.current = req.id;
+    requestedByRef.current = req.created_by || null;
+    const fromSupplier = suppliers.find((s) => s.name === supplierName);
+    const toSupplier = suppliers.find((s) => s.name === receiverName);
+    setForm({
+      ...emptyForm,
+      materials,
+      pickup_location: pickup,
+      drop_location: drop,
+      vehicle_type: (VEHICLE_TYPES.includes(vehicle as typeof VEHICLE_TYPES[number]) ? vehicle : "") as PorterBooking["vehicle_type"] | "",
+      approx_weight: weight,
+      notes,
+      from_supplier_id: fromSupplier?.id ?? "",
+      to_supplier_id: toSupplier?.id ?? "",
+    });
+    setFromSupplierSearch(fromSupplier?.name ?? supplierName);
+    setToSupplierSearch(toSupplier?.name ?? receiverName);
+    setStopSearches([]);
+    setStopOpens([]);
+    setEditingBooking(null);
+    setModalOpen(true);
+  };
 
   const openCreate = () => {
     setEditingBooking(null);
@@ -583,6 +650,7 @@ export default function PorterPage() {
       setStopSearches([]);
       setStopOpens([]);
       await loadMyRequests();
+      await loadAllPorterRequests();
     }
     setSaving(false);
   };
@@ -662,8 +730,8 @@ export default function PorterPage() {
     }
 
     if (!asDraft) {
-      if (form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date) {
-        toast("Fill at least one Material, Pickup & Drop locations", "error");
+      if (form.materials.length === 0 || !form.pickup_location.trim() || !form.drop_location.trim() || !form.booking_date || !form.approx_weight.trim()) {
+        toast("Fill at least one Material, Pickup & Drop locations, and Weight", "error");
         return;
       }
       const isUrl = (v: string) => /^https?:\/\//i.test(v.trim());
@@ -940,6 +1008,45 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
                       onPorterShare={handlePorterShare} />
                   ))}
             </div>
+
+            {/* Pending Requests (porter-access users — all unbooked requests) */}
+            {hasPorterFullAccess && allPorterRequests.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide px-1">Pending Requests</h3>
+                {allPorterRequests.map((req) => {
+                  const parts = req.task.split(" | ");
+                  const materials = parts.find(p => p.startsWith("Materials: "))?.replace("Materials: ", "") || "";
+                  const from = parts.find(p => p.startsWith("From: "))?.replace("From: ", "") || "";
+                  const to = parts.find(p => p.startsWith("To: "))?.replace("To: ", "") || "";
+                  return (
+                    <div key={req.id} className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex flex-wrap gap-1">
+                          {materials.split(", ").filter(Boolean).map((m) => (
+                            <span key={m} className="text-[11px] font-semibold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">{m}</span>
+                          ))}
+                        </div>
+                        <button onClick={() => handleBookFromRequest(req)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-white hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition border border-indigo-200">
+                          <Truck className="w-3 h-3" /> Book
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-indigo-100 text-xs text-gray-600">
+                        <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                        <span className="truncate font-medium">{from}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                        <span className="truncate font-medium">{to}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                        <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {req.due_date}</span>
+                        {req.created_by && <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" /> {req.created_by}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Pending Requests (non-porter users only) */}
             {!hasPorterFullAccess && myRequests.length > 0 && (
@@ -1338,7 +1445,7 @@ ALTER TABLE porter_bookings DISABLE ROW LEVEL SECURITY;
               {/* Weight + Contact */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Approx Weight</label>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Approx Weight <span className="text-red-500">*</span></label>
                   <input value={form.approx_weight}
                     onChange={(e) => setForm((f) => ({ ...f, approx_weight: e.target.value }))}
                     placeholder="e.g. 50 kg"

@@ -223,8 +223,14 @@ export default function LeavePage() {
   };
 
   const getDays = (from: string, to: string) => {
-    const diff = new Date(to).getTime() - new Date(from).getTime();
-    return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1);
+    let count = 0;
+    const current = new Date(from);
+    const end = new Date(to);
+    while (current <= end) {
+      if (current.getDay() !== 6) count++; // exclude Saturday
+      current.setDate(current.getDate() + 1);
+    }
+    return Math.max(1, count);
   };
 
   // Can apply leave: supervisors and employees
