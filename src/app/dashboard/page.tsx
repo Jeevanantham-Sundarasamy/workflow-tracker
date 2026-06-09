@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -43,12 +44,14 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, mr, cr] = await Promise.all([
+      const [tr, sr, er, mr, cr, pr, mtR] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
         supabase.from("managers").select("*").order("name"),
         supabase.from("customers").select("*").order("name"),
+        supabase.from("projects").select("*").eq("status", "Active").order("created_at", { ascending: false }),
+        supabase.from("machine_types").select("id, name"),
       ]);
       if (tr.error) throw tr.error;
       if (sr.error) throw sr.error;
@@ -62,6 +65,13 @@ export default function DashboardPage() {
       })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setCustomers(cr.data || []);
+      const mtMap = Object.fromEntries((mtR.data || []).map((mt: { id: number; name: string }) => [String(mt.id), mt.name]));
+      setProjects((pr.data || []).map((p: { id: string; machine_type_id: string; serial_number: string; customer_name: string }) => ({
+        id: p.id,
+        serial_number: p.serial_number,
+        customer_name: p.customer_name,
+        machine_type_name: mtMap[String(p.machine_type_id)] || "",
+      })));
     } catch { /* offline */ }
     setLoading(false);
   }, []);
@@ -351,7 +361,7 @@ export default function DashboardPage() {
       </div>
 
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} customers={customers} roleName={roleName}
+        employees={modalEmployees} projects={projects} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
