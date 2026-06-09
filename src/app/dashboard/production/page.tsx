@@ -50,7 +50,7 @@ export default function ProductionPage() {
       const pts = ptRes.data || [];
       const mtMap = Object.fromEntries(mts.map((m: MachineType) => [m.id, m.name]));
 
-      const projectsWithProgress = (pRes.data || []).map((p: Project) => {
+      const projectsWithProgress: (Project & { machine_type_name: string; progress: number; total: number; done: number })[] = (pRes.data || []).map((p: Project) => {
         const tasks = pts.filter((t: ProjectTask) => t.project_id === p.id);
         const done = tasks.filter((t: ProjectTask) => t.status === "Done").length;
         return { ...p, machine_type_name: mtMap[p.machine_type_id] || "Unknown", progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, total: tasks.length, done };
