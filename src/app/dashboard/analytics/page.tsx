@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Task, Supervisor, Employee, Customer } from "@/lib/types";
+import type { Task, Supervisor, Employee, Customer, Project, ProjectTask, MachineType } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
@@ -23,6 +23,7 @@ export default function AnalyticsPage() {
   const [supervisorRecords, setSupervisorRecords] = useState<Supervisor[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<(Project & { machine_type_name: string; progress: number; total: number; done: number; pending: number; inProgress: number })[]>([]);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [dateFrom, setDateFrom] = useState("");
@@ -31,18 +32,30 @@ export default function AnalyticsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, cr] = await Promise.all([
+      const [tr, sr, er, cr, pr, mtr, ptr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("*").order("name"),
         supabase.from("customers").select("*").order("name"),
+        supabase.from("projects").select("*").order("created_at", { ascending: false }),
+        supabase.from("machine_types").select("*"),
+        supabase.from("project_tasks").select("id, project_id, status"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
       setSupervisorRecords(sr.data || []);
       setEmployeeRecords(er.data || []);
       setCustomers(cr.data || []);
-      setSupervisors((sr.data || []).map((s: { name: string }) => s.name)); setConnection("live");
+      setSupervisors((sr.data || []).map((s: { name: string }) => s.name));
+      const mtMap = Object.fromEntries((mtr.data || []).map((m: MachineType) => [m.id, m.name]));
+      setProjects((pr.data || []).map((p: Project) => {
+        const pts = (ptr.data || []).filter((t: ProjectTask) => t.project_id === p.id);
+        const done = pts.filter((t: ProjectTask) => t.status === "Done").length;
+        const inProgress = pts.filter((t: ProjectTask) => t.status === "In Progress").length;
+        const pending = pts.filter((t: ProjectTask) => t.status === "Pending").length;
+        return { ...p, machine_type_name: mtMap[p.machine_type_id] || "Unknown", total: pts.length, done, inProgress, pending, progress: pts.length ? Math.round((done / pts.length) * 100) : 0 };
+      }));
+      setConnection("live");
     } catch { setConnection("offline"); }
   }, []);
 
@@ -115,6 +128,29 @@ export default function AnalyticsPage() {
     { name: "Medium", value: filtered.filter((t) => t.priority === "Medium").length, color: "#f59e0b" },
     { name: "Low", value: filtered.filter((t) => t.priority === "Low").length, color: "#94a3b8" },
   ].filter((d) => d.value > 0);
+
+  // Project analytics data
+  const projectStatusData = [
+    { name: "Active", value: projects.filter((p) => p.status === "Active").length, color: "#3b82f6" },
+    { name: "Completed", value: projects.filter((p) => p.status === "Completed").length, color: "#10b981" },
+    { name: "On Hold", value: projects.filter((p) => p.status === "On Hold").length, color: "#f97316" },
+  ].filter((d) => d.value > 0);
+
+  const projectProgressData = projects
+    .filter((p) => p.total > 0)
+    .slice(0, 10)
+    .map((p) => ({
+      name: p.serial_number.length > 12 ? p.serial_number.slice(0, 12) + "…" : p.serial_number,
+      customer: p.customer_name,
+      Pending: p.pending,
+      "In Progress": p.inProgress,
+      Done: p.done,
+      total: p.total,
+    }));
+
+  const machineTypeData = Object.entries(
+    projects.reduce((acc, p) => { acc[p.machine_type_name] = (acc[p.machine_type_name] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
   // Department-wise task data
   const personDeptMap = new Map<string, string>();
@@ -258,6 +294,113 @@ export default function AnalyticsPage() {
             </div>
           </div>
         )}
+
+        {/* Project Analytics */}
+        {projects.length > 0 && (<>
+          <div>
+            <h2 className="text-base font-bold text-gray-900 mb-4">Production Projects</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+              {/* Project Status Distribution */}
+              <div className="bg-white rounded-2xl border border-border p-6">
+                <h3 className="text-sm font-bold text-gray-900 mb-4">Project Status Distribution</h3>
+                {projectStatusData.length ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <div className="relative">
+                      <ResponsiveContainer width={200} height={200}>
+                        <PieChart>
+                          <Pie data={projectStatusData} innerRadius={60} outerRadius={88} paddingAngle={4} dataKey="value" strokeWidth={0}>
+                            {projectStatusData.map((d) => <Cell key={d.name} fill={d.color} />)}
+                          </Pie>
+                          <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-3xl font-black text-gray-900">{projects.length}</span>
+                        <span className="text-[10px] text-gray-400 font-medium">Projects</span>
+                      </div>
+                    </div>
+                    <div className="ml-6 space-y-3">
+                      {projectStatusData.map((d) => (
+                        <div key={d.name} className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                          <span className="text-xs text-gray-600 font-medium">{d.name}</span>
+                          <span className="text-sm font-black text-gray-900 ml-auto pl-4">{d.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : <p className="text-xs text-gray-400 text-center py-12">No data</p>}
+              </div>
+
+              {/* Projects by Machine Type */}
+              <div className="bg-white rounded-2xl border border-border p-6">
+                <h3 className="text-sm font-bold text-gray-900 mb-4">Projects by Machine Type</h3>
+                {machineTypeData.length ? (
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={machineTypeData} layout="vertical" barGap={2}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }} />
+                        <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} name="Projects" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : <p className="text-xs text-gray-400 text-center py-12">No data</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Project Progress */}
+          {projectProgressData.length > 0 && (
+            <div className="bg-white rounded-2xl border border-border p-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-5">Project Task Progress</h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={projectProgressData} barGap={2}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
+                      formatter={(value, name) => [value, name]}
+                      labelFormatter={(label, payload) => {
+                        const item = payload?.[0]?.payload;
+                        return item ? `${label} — ${item.customer}` : label;
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Pending" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="In Progress" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Done" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Project progress bars */}
+              <div className="mt-6 space-y-3">
+                {projects.filter((p) => p.total > 0).slice(0, 8).map((p) => (
+                  <div key={p.id}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-bold text-gray-800 truncate">{p.serial_number}</span>
+                        <span className="text-[10px] text-gray-400 truncate hidden sm:block">— {p.customer_name}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${p.status === "Completed" ? "bg-emerald-50 text-emerald-600" : p.status === "Active" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>{p.status}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-gray-600 flex-shrink-0 ml-3">{p.progress}%</span>
+                    </div>
+                    <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
+                      {p.pending > 0 && <div className="bg-amber-400" style={{ width: `${(p.pending / p.total) * 100}%` }} />}
+                      {p.inProgress > 0 && <div className="bg-blue-500" style={{ width: `${(p.inProgress / p.total) * 100}%` }} />}
+                      {p.done > 0 && <div className="bg-emerald-500" style={{ width: `${(p.done / p.total) * 100}%` }} />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>)}
 
         {/* Department-wise Work Progress */}
         {deptChartData.length > 0 && (

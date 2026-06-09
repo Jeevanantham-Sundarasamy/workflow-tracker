@@ -16,6 +16,7 @@ export interface Task {
   created_at: string;
   completed_at?: string | null;
   customer_id?: string | null;
+  project_id?: string | null;
 }
 
 export interface Customer {
@@ -23,6 +24,10 @@ export interface Customer {
   name: string;
   machine_number: string | null;
   machine_type: string | null;
+  contact: string | null;
+  phone: string | null;
+  gst: string | null;
+  city: string | null;
   created_at: string;
 }
 
@@ -164,6 +169,8 @@ export interface Project {
   machine_type_id: string;
   serial_number: string;
   customer_name: string;
+  customer_machine_number: string | null;
+  color_type: string | null;
   start_date: string;
   due_date: string;
   status: "Active" | "Completed" | "On Hold";

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import type { Customer, Task } from "@/lib/types";
+import type { Customer } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
@@ -13,22 +13,17 @@ export default function CustomersPage() {
   const { toast } = useToast();
   const { hasFullAccess, login } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [form, setForm] = useState({ name: "", machine_number: "", machine_type: "" });
+  const [form, setForm] = useState({ name: "", machine_number: "", machine_type: "", contact: "", phone: "", gst: "", city: "" });
   const [filterName, setFilterName] = useState("All");
   const [pinModalOpen, setPinModalOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const [cr, tr] = await Promise.all([
-      supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("tasks").select("id, customer_id, status"),
-    ]);
-    setCustomers(cr.data || []);
-    setTasks((tr.data || []) as Task[]);
+    const { data } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+    setCustomers(data || []);
     setLoading(false);
   }, []);
 
@@ -40,13 +35,13 @@ export default function CustomersPage() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", machine_number: "", machine_type: "" });
+    setForm({ name: "", machine_number: "", machine_type: "", contact: "", phone: "", gst: "", city: "" });
     setModalOpen(true);
   };
 
   const openEdit = (c: Customer) => {
     setEditing(c);
-    setForm({ name: c.name, machine_number: c.machine_number || "", machine_type: c.machine_type || "" });
+    setForm({ name: c.name, machine_number: c.machine_number || "", machine_type: c.machine_type || "", contact: c.contact || "", phone: c.phone || "", gst: c.gst || "", city: c.city || "" });
     setModalOpen(true);
   };
 
@@ -59,6 +54,10 @@ export default function CustomersPage() {
       name: form.name.trim(),
       machine_number: form.machine_number.trim() || null,
       machine_type: form.machine_type.trim() || null,
+      contact: form.contact.trim() || null,
+      phone: form.phone.trim() || null,
+      gst: form.gst.trim() || null,
+      city: form.city.trim() || null,
     };
     if (editing) {
       const { error } = await supabase.from("customers").update(payload).eq("id", editing.id);
@@ -140,71 +139,60 @@ export default function CustomersPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filtered.map((c) => {
-              const ct = tasks.filter((t) => t.customer_id === c.id);
-              const total = ct.length;
-              const counts = {
-                pending: ct.filter((t) => t.status === "Pending").length,
-                inProgress: ct.filter((t) => t.status === "In Progress").length,
-                done: ct.filter((t) => t.status === "Done").length,
-                delayed: ct.filter((t) => t.status === "Delayed").length,
-                onHold: ct.filter((t) => t.status === "On Hold").length,
-                cancelled: ct.filter((t) => t.status === "Cancelled").length,
-              };
-              const pct = total ? Math.round((counts.done / total) * 100) : 0;
-              return (
-                <div key={c.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-gray-900 truncate">{c.name}</h3>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
-                        {c.machine_number && <span>Machine: <span className="font-semibold text-gray-700">{c.machine_number}</span></span>}
-                        {c.machine_type && <span>Type: <span className="font-semibold text-gray-700">{c.machine_type}</span></span>}
-                      </div>
+            {Object.values(
+              filtered.reduce((acc, c) => {
+                const key = c.name.toLowerCase().trim();
+                if (!acc[key]) acc[key] = { primary: c, ids: [c.id] };
+                else acc[key].ids.push(c.id);
+                return acc;
+              }, {} as Record<string, { primary: Customer; ids: string[] }>)
+            ).map(({ primary: c }) => (
+              <div key={c.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-gray-900 truncate">{c.name}</h3>
+                    <div className="mt-2 space-y-1">
+                      {c.contact && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14 font-semibold text-gray-400 uppercase tracking-wide text-[10px]">Contact</span>
+                          <span className="text-gray-700">{c.contact}</span>
+                        </div>
+                      )}
+                      {c.phone && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14 font-semibold text-gray-400 uppercase tracking-wide text-[10px]">Phone</span>
+                          <span className="text-gray-700">{c.phone}</span>
+                        </div>
+                      )}
+                      {c.gst && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14 font-semibold text-gray-400 uppercase tracking-wide text-[10px]">GST</span>
+                          <span className="text-gray-700 font-mono">{c.gst}</span>
+                        </div>
+                      )}
+                      {c.city && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="w-14 font-semibold text-gray-400 uppercase tracking-wide text-[10px]">City</span>
+                          <span className="text-gray-700">{c.city}</span>
+                        </div>
+                      )}
                     </div>
-                    {hasFullAccess && (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button onClick={() => openEdit(c)} title="Edit"
-                          className="w-8 h-8 rounded-lg hover:bg-primary-50 flex items-center justify-center text-gray-400 hover:text-primary-600 transition">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => remove(c.id)} title="Delete"
-                          className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
                   </div>
-
-                  {total === 0 ? (
-                    <p className="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg px-3 py-2">No tasks yet for this machine</p>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] text-gray-500 font-medium">{total} task{total !== 1 ? "s" : ""}</span>
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{pct}% complete</span>
-                      </div>
-                      <div className="flex h-5 rounded-full overflow-hidden bg-gray-100 mb-2.5">
-                        {counts.pending > 0 && <div className="bg-amber-400" style={{ width: `${(counts.pending / total) * 100}%` }} title={`Pending: ${counts.pending}`} />}
-                        {counts.inProgress > 0 && <div className="bg-blue-500" style={{ width: `${(counts.inProgress / total) * 100}%` }} title={`In Progress: ${counts.inProgress}`} />}
-                        {counts.done > 0 && <div className="bg-emerald-500" style={{ width: `${(counts.done / total) * 100}%` }} title={`Done: ${counts.done}`} />}
-                        {counts.delayed > 0 && <div className="bg-red-400" style={{ width: `${(counts.delayed / total) * 100}%` }} title={`Delayed: ${counts.delayed}`} />}
-                        {counts.onHold > 0 && <div className="bg-orange-400" style={{ width: `${(counts.onHold / total) * 100}%` }} title={`On Hold: ${counts.onHold}`} />}
-                        {counts.cancelled > 0 && <div className="bg-gray-400" style={{ width: `${(counts.cancelled / total) * 100}%` }} title={`Cancelled: ${counts.cancelled}`} />}
-                      </div>
-                      <div className="flex gap-2 flex-wrap">
-                        {counts.pending > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending <b className="text-gray-800">{counts.pending}</b></span>}
-                        {counts.inProgress > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-blue-500" />In Progress <b className="text-gray-800">{counts.inProgress}</b></span>}
-                        {counts.done > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-emerald-500" />Done <b className="text-gray-800">{counts.done}</b></span>}
-                        {counts.delayed > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-red-400" />Delayed <b className="text-gray-800">{counts.delayed}</b></span>}
-                        {counts.onHold > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-orange-400" />On Hold <b className="text-gray-800">{counts.onHold}</b></span>}
-                        {counts.cancelled > 0 && <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-gray-400" />Cancelled <b className="text-gray-800">{counts.cancelled}</b></span>}
-                      </div>
-                    </>
+                  {hasFullAccess && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button onClick={() => openEdit(c)} title="Edit"
+                        className="w-8 h-8 rounded-lg hover:bg-primary-50 flex items-center justify-center text-gray-400 hover:text-primary-600 transition">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => remove(c.id)} title="Delete"
+                        className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -222,23 +210,34 @@ export default function CustomersPage() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer Name</label>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer Name <span className="text-red-500">*</span></label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. ABC Corp"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Machine Number</label>
-                <input type="text" value={form.machine_number} onChange={(e) => setForm({ ...form, machine_number: e.target.value })}
-                  placeholder="e.g. MC-12345"
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Contact</label>
+                <input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                  placeholder="e.g. John Doe"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Machine Type / Number</label>
-                <input type="text" value={form.machine_type} onChange={(e) => setForm({ ...form, machine_type: e.target.value })}
-                  placeholder="e.g. CNC Lathe / MT-789"
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Phone</label>
+                <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="e.g. +91 9999999999"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
-                <p className="text-[10px] text-gray-400 mt-1">For your reference only — shown in Customers list.</p>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">GST</label>
+                <input type="text" value={form.gst} onChange={(e) => setForm({ ...form, gst: e.target.value })}
+                  placeholder="e.g. 33AABCC1234D1ZX"
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">City</label>
+                <input type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  placeholder="e.g. Tiruppur, Tamil Nadu"
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
               </div>
             </div>
             <div className="flex gap-3 p-6 pt-2">

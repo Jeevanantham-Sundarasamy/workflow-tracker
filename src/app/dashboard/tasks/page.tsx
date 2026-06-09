@@ -26,6 +26,7 @@ export default function TasksPage() {
   const [managers, setManagers] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string }[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -33,6 +34,7 @@ export default function TasksPage() {
   const [filterSup, setFilterSup] = useState("All");
   const [filterEmp, setFilterEmp] = useState("All");
   const [filterCustomer, setFilterCustomer] = useState("All");
+  const [filterProject, setFilterProject] = useState("All");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -78,12 +80,14 @@ export default function TasksPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [tr, sr, er, mr, cr] = await Promise.all([
+      const [tr, sr, er, mr, cr, pr, mtr] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("supervisors").select("*").order("name"),
         supabase.from("employees").select("name, supervisor_name").order("name"),
         supabase.from("managers").select("name").order("name"),
         supabase.from("customers").select("*").order("name"),
+        supabase.from("projects").select("id, serial_number, customer_name, machine_type_id, status").order("created_at", { ascending: false }),
+        supabase.from("machine_types").select("id, name"),
       ]);
       if (tr.error) throw tr.error; if (sr.error) throw sr.error;
       setTasks(tr.data || []);
@@ -94,6 +98,15 @@ export default function TasksPage() {
       })));
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setCustomers(cr.data || []);
+      const mtMap = Object.fromEntries((mtr.data || []).map((m: { id: string; name: string }) => [m.id, m.name]));
+      setProjects((pr.data || [])
+        .filter((p: { status: string }) => p.status === "Active")
+        .map((p: { id: string; serial_number: string; customer_name: string; machine_type_id: string }) => ({
+          id: p.id,
+          serial_number: p.serial_number,
+          customer_name: p.customer_name,
+          machine_type_name: mtMap[p.machine_type_id] || "",
+        })));
       setConnection("live");
     } catch { setConnection("offline"); }
     setLoading(false);
@@ -131,7 +144,7 @@ export default function TasksPage() {
     if (filterStatus !== "All" && filterStatus !== "Completed" && t.status !== filterStatus) return false;
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (filterEmp !== "All" && t.assigned_to !== filterEmp && !(t.extra_assignees ?? []).includes(filterEmp)) return false;
-    if (filterCustomer !== "All" && t.customer_id !== filterCustomer) return false;
+    if (filterProject !== "All" && t.project_id !== filterProject) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
       const dateField = filterStatus === "Completed"
@@ -320,14 +333,12 @@ export default function TasksPage() {
               ).map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
             </select>
           )}
-          {customers.length > 0 && (
-            <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
+          {projects.length > 0 && (
+            <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
               className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
-              <option value="All">All Customers / Machines</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
-                </option>
+              <option value="All">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.serial_number} — {p.customer_name}</option>
               ))}
             </select>
           )}
@@ -371,7 +382,7 @@ export default function TasksPage() {
         </div>
       </div>
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} customers={customers} roleName={roleName}
+        employees={modalEmployees} projects={projects} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <ShareTaskModal open={shareTasks.length > 0} tasks={shareTasks} onClose={() => setShareTasks([])} />

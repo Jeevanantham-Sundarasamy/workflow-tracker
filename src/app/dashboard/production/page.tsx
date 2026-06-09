@@ -24,6 +24,7 @@ const statusColors: Record<string, { bg: string; text: string; border: string }>
 export default function ProductionPage() {
   const { toast } = useToast();
   const { hasFullAccess, isSupervisor, userName, login } = useAuth();
+  const canCreateProject = hasFullAccess || isSupervisor;
   const canEdit = hasFullAccess || isSupervisor;
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [projects, setProjects] = useState<(Project & { machine_type_name: string; progress: number; total: number; done: number })[]>([]);
@@ -33,7 +34,8 @@ export default function ProductionPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ machine_type_id: "", serial_number: "", customer_id: "", customer_name: "", start_date: "", due_date: "" });
+  const [form, setForm] = useState({ machine_type_id: "", color_type: "", serial_number: "", customer_id: "", customer_name: "", customer_machine_number: "", start_date: "", due_date: "" });
+  const [completedOpen, setCompletedOpen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -63,13 +65,18 @@ export default function ProductionPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const matchesSearch = (p: typeof projects[0]) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return p.serial_number.toLowerCase().includes(q) || p.customer_name.toLowerCase().includes(q) || p.machine_type_name.toLowerCase().includes(q);
+  };
+
+  const completedProjects = projects.filter((p) => p.status === "Completed" && matchesSearch(p));
+
   const filtered = projects.filter((p) => {
-    if (filterStatus !== "All" && p.status !== filterStatus) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return p.serial_number.toLowerCase().includes(q) || p.customer_name.toLowerCase().includes(q) || p.machine_type_name.toLowerCase().includes(q);
-    }
-    return true;
+    if (p.status === "Completed") return false;
+    if (filterStatus !== "All" && filterStatus !== "Completed" && p.status !== filterStatus) return false;
+    return matchesSearch(p);
   });
 
   const stats = {
@@ -80,7 +87,7 @@ export default function ProductionPage() {
   };
 
   const handleCreate = async () => {
-    if (!form.machine_type_id || !form.serial_number.trim() || !form.customer_name.trim() || !form.start_date || !form.due_date) {
+    if (!form.machine_type_id || !form.color_type || !form.customer_machine_number.trim() || !form.serial_number.trim() || !form.customer_name.trim() || !form.start_date || !form.due_date) {
       toast("All fields are required", "error"); return;
     }
     setSubmitting(true);
@@ -88,8 +95,10 @@ export default function ProductionPage() {
     // Create project
     const { data: project, error } = await supabase.from("projects").insert({
       machine_type_id: Number(form.machine_type_id),
+      color_type: form.color_type,
       serial_number: form.serial_number.trim(),
       customer_name: form.customer_name.trim(),
+      customer_machine_number: form.customer_machine_number.trim(),
       start_date: form.start_date,
       due_date: form.due_date,
       created_by: userName || "Admin",
@@ -130,7 +139,7 @@ export default function ProductionPage() {
 
     toast("Project created!", "success");
     setModalOpen(false);
-    setForm({ machine_type_id: "", serial_number: "", customer_id: "", customer_name: "", start_date: "", due_date: "" });
+    setForm({ machine_type_id: "", color_type: "", serial_number: "", customer_id: "", customer_name: "", customer_machine_number: "", start_date: "", due_date: "" });
     setSubmitting(false);
     loadData();
   };
@@ -178,13 +187,13 @@ export default function ProductionPage() {
             <p className="text-sm text-gray-400">{stats.total} projects · {stats.active} active</p>
           </div>
           <div className="flex items-center gap-2">
-            {canEdit && (
+            {hasFullAccess && (
               <Link href="/dashboard/production/machine-types"
                 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 bg-white border border-border px-3 py-2 rounded-xl hover:bg-gray-50 transition">
                 <Settings2 className="w-3.5 h-3.5" /> Machine Types
               </Link>
             )}
-            {canEdit && (
+            {canCreateProject && (
               <button onClick={() => setModalOpen(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
                 <Plus className="w-4 h-4" /> New Project
@@ -226,7 +235,51 @@ export default function ProductionPage() {
           </div>
         </div>
 
-        {/* Project List */}
+        {/* Completed Projects */}
+        {!loading && completedProjects.length > 0 && (
+          <div>
+            <button
+              onClick={() => setCompletedOpen((o) => !o)}
+              className="flex items-center gap-2 mb-3 group"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span className="text-sm font-bold text-gray-700">Completed Projects</span>
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{completedProjects.length}</span>
+              <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${completedOpen ? "rotate-90" : ""}`} />
+            </button>
+            {completedOpen && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {completedProjects.map((p) => (
+                  <Link key={p.id} href={`/dashboard/production/projects/${p.id}`}
+                    className="bg-white rounded-2xl border border-emerald-200 p-5 hover:shadow-md transition block">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <h3 className="text-sm font-bold text-gray-900 truncate">{p.serial_number}</h3>
+                          <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{p.machine_type_name}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
+                          <span className="flex items-center gap-1"><User className="w-3 h-3" />{p.customer_name}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{p.start_date} → {p.due_date}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">100% complete</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] text-gray-500 font-medium">{p.total} task{p.total !== 1 ? "s" : ""}</span>
+                      <span className="flex items-center gap-1 text-[11px] text-gray-600"><span className="w-2 h-2 rounded-full bg-emerald-500" />Done <b className="text-gray-800">{p.done}</b></span>
+                    </div>
+                    <div className="h-5 rounded-full overflow-hidden bg-gray-100">
+                      <div className="h-full bg-emerald-500 rounded-full w-full" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Active / On Hold Project List */}
         {loading ? (
           <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="bg-white rounded-2xl border border-border p-6 h-32 animate-pulse" />)}</div>
         ) : filtered.length ? (
@@ -306,10 +359,25 @@ export default function ProductionPage() {
                 <>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Machine Type <span className="text-red-400">*</span></label>
-                    <select value={form.machine_type_id} onChange={(e) => setForm({ ...form, machine_type_id: e.target.value })}
+                    <select value={form.machine_type_id} onChange={(e) => setForm({ ...form, machine_type_id: e.target.value, color_type: "" })}
                       className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
                       <option value="">Select machine type</option>
                       {machineTypes.map((mt) => <option key={mt.id} value={mt.id}>{mt.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Color Type <span className="text-red-400">*</span></label>
+                    <select value={form.color_type} onChange={(e) => setForm({ ...form, color_type: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+                      <option value="">Select color type</option>
+                      <option value="4c">4c</option>
+                      <option value="6c">6c</option>
+                      {machineTypes.find((mt) => String(mt.id) === form.machine_type_id)?.name?.toLowerCase().includes("oval") && (
+                        <>
+                          <option value="8c">8c</option>
+                          <option value="16c">16c</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -326,25 +394,29 @@ export default function ProductionPage() {
                             ...form,
                             customer_id: e.target.value,
                             customer_name: c?.name || "",
-                            serial_number: c?.machine_number || form.serial_number,
+                            customer_machine_number: c?.machine_number || "",
                           });
                         }}
                         className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
                         <option value="">Select customer</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
-                          </option>
-                        ))}
+                        {customers
+                          .filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i)
+                          .map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     )}
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Serial / Machine Number <span className="text-red-400">*</span></label>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer Machine Number <span className="text-red-400">*</span></label>
+                    <input type="text" value={form.customer_machine_number}
+                      onChange={(e) => setForm({ ...form, customer_machine_number: e.target.value })}
+                      placeholder="e.g. CMN-001"
+                      className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Machine Number <span className="text-red-400">*</span></label>
                     <input type="text" value={form.serial_number} onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
                       placeholder="e.g. SN-2024-001"
                       className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                    <p className="text-[10px] text-gray-400 mt-1">Auto-filled from customer machine number — you can override.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>

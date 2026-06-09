@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
 
-interface CustomerOption { id: string; name: string; machine_number: string | null; }
+interface ProjectOption { id: string; serial_number: string; customer_name: string; machine_type_name: string; }
 
 interface TaskModalProps {
   open: boolean;
   task: Task | null;
   supervisors: string[];
   employees?: { name: string; supervisor_names: string[] | null }[];
-  customers?: CustomerOption[];
+  projects?: ProjectOption[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -23,7 +23,7 @@ export default function TaskModal({
   task,
   supervisors,
   employees = [],
-  customers = [],
+  projects = [],
   roleName = "Admin",
   onClose,
   onSave,
@@ -40,7 +40,7 @@ export default function TaskModal({
     assigned_to: "" as string,
     assigned_to_type: "supervisor" as "supervisor" | "employee",
     extra_assignees: [] as string[],
-    customer_id: "" as string,
+    project_id: "" as string,
   });
   // Extra task lines — when creating, each one becomes its own task row (same assignees)
   const [extraTasks, setExtraTasks] = useState<string[]>([]);
@@ -59,7 +59,7 @@ export default function TaskModal({
         assigned_to: task.assigned_to || "",
         assigned_to_type: task.assigned_to_type || "supervisor",
         extra_assignees: task.extra_assignees || [],
-        customer_id: task.customer_id || "",
+        project_id: task.project_id || "",
       });
       setExtraTasks([]);
     } else {
@@ -75,7 +75,7 @@ export default function TaskModal({
         assigned_to: "",
         assigned_to_type: "supervisor",
         extra_assignees: [],
-        customer_id: "",
+        project_id: "",
       });
       setExtraTasks([]);
     }
@@ -100,6 +100,10 @@ export default function TaskModal({
       alert("Please select a supervisor to assign the task.");
       return;
     }
+    if (projects.length > 0 && !form.project_id) {
+      alert("Project is required.");
+      return;
+    }
     const basePayload = {
       ...form,
       follow_up: form.follow_up || null,
@@ -110,7 +114,7 @@ export default function TaskModal({
       assigned_to_type: form.assigned_to ? form.assigned_to_type : null,
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
-      customer_id: form.customer_id || null,
+      project_id: form.project_id || null,
     };
 
     // When editing, save just the single task. When creating, split into multiple
@@ -293,34 +297,40 @@ export default function TaskModal({
             </button>
           </div>
 
-          {/* Customer + Machine Number */}
-          {customers.length > 0 && (
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                Customer <span className="normal-case text-gray-300">(optional)</span>
-              </label>
-              <select
-                value={form.customer_id}
-                onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
-              >
-                <option value="">No customer</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.machine_number ? ` — Machine: ${c.machine_number}` : ""}
-                  </option>
-                ))}
-              </select>
-              {form.customer_id && (() => {
-                const sel = customers.find((c) => c.id === form.customer_id);
-                return sel?.machine_number ? (
-                  <p className="text-[11px] text-gray-500 mt-1.5">
-                    Machine Number: <span className="font-semibold text-gray-800">{sel.machine_number}</span>
-                  </p>
-                ) : null;
-              })()}
-            </div>
-          )}
+          {/* Project */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Project <span className="text-red-500">*</span>
+            </label>
+            {projects.length === 0 ? (
+              <div className="px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-700 font-medium">
+                No active projects. Please create a project in Production first.
+              </div>
+            ) : (
+              <>
+                <select
+                  value={form.project_id}
+                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+                >
+                  <option value="">Select project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.serial_number} — {p.customer_name}
+                    </option>
+                  ))}
+                </select>
+                {form.project_id && (() => {
+                  const sel = projects.find((p) => p.id === form.project_id);
+                  return sel ? (
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      Machine: <span className="font-semibold text-gray-800">{sel.machine_type_name}</span>
+                    </p>
+                  ) : null;
+                })()}
+              </>
+            )}
+          </div>
 
           {/* Row: Due Date + Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
