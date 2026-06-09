@@ -66,9 +66,9 @@ export default function AnalyticsPage() {
   // Department breakdown
   const deptMap: Record<string, { Pending: number; "In Progress": number; Done: number; total: number }> = {};
   tasks.forEach((t) => {
-    const d = t.department || "General";
+    const d = t.department_name || "General";
     if (!deptMap[d]) deptMap[d] = { Pending: 0, "In Progress": 0, Done: 0, total: 0 };
-    deptMap[d][t.status as keyof typeof deptMap[string]]++;
+    if (t.status in deptMap[d]) deptMap[d][t.status as "Pending" | "In Progress" | "Done"]++;
     deptMap[d].total++;
   });
   const deptData = Object.entries(deptMap)
