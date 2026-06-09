@@ -10,6 +10,7 @@ import type { Task, Customer } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
+import ServiceTaskModal from "@/components/ServiceTaskModal";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import ShareTaskModal from "@/components/ShareTaskModal";
 import PinModal from "@/components/PinModal";
@@ -26,7 +27,7 @@ export default function TasksPage() {
   const [managers, setManagers] = useState<string[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string; status: string }[]>([]);
   const [connection, setConnection] = useState<"live" | "offline" | "connecting">("connecting");
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -38,9 +39,13 @@ export default function TasksPage() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [taskTypeSelectOpen, setTaskTypeSelectOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [serviceEditingTask, setServiceEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [filterTaskType, setFilterTaskType] = useState("All");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareTasks, setShareTasks] = useState<Task[]>([]);
@@ -99,14 +104,13 @@ export default function TasksPage() {
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setCustomers(cr.data || []);
       const mtMap = Object.fromEntries((mtr.data || []).map((m: { id: string; name: string }) => [m.id, m.name]));
-      setProjects((pr.data || [])
-        .filter((p: { status: string }) => p.status === "Active")
-        .map((p: { id: string; serial_number: string; customer_name: string; machine_type_id: string }) => ({
-          id: p.id,
-          serial_number: p.serial_number,
-          customer_name: p.customer_name,
-          machine_type_name: mtMap[p.machine_type_id] || "",
-        })));
+      setProjects((pr.data || []).map((p: { id: string; serial_number: string; customer_name: string; machine_type_id: string; status: string }) => ({
+        id: p.id,
+        serial_number: p.serial_number,
+        customer_name: p.customer_name,
+        machine_type_name: mtMap[p.machine_type_id] || "",
+        status: p.status,
+      })));
       setConnection("live");
     } catch { setConnection("offline"); }
     setLoading(false);
@@ -114,10 +118,10 @@ export default function TasksPage() {
 
   useEffect(() => {
     loadData();
-    if (taskModalOpen || detailTask) return;
+    if (taskModalOpen || serviceModalOpen || detailTask) return;
     const i = setInterval(loadData, 60000);
     return () => clearInterval(i);
-  }, [loadData, taskModalOpen, detailTask]);
+  }, [loadData, taskModalOpen, serviceModalOpen, detailTask]);
 
   useRealtime("tasks", useCallback((payload) => {
     if (payload.eventType === "INSERT") {
@@ -145,6 +149,7 @@ export default function TasksPage() {
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (filterEmp !== "All" && t.assigned_to !== filterEmp && !(t.extra_assignees ?? []).includes(filterEmp)) return false;
     if (filterProject !== "All" && t.project_id !== filterProject) return false;
+    if (filterTaskType !== "All" && (t.task_type || "production") !== filterTaskType) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
       const dateField = filterStatus === "Completed"
@@ -239,7 +244,6 @@ export default function TasksPage() {
       const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", editingTask.id).select().single();
       if (!error && updated) { setTasks((p) => p.map((t) => (t.id === editingTask.id ? updated : t))); toast("Task updated", "success"); }
     } else {
-      
       const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
       if (!error && created) { setTasks((p) => (p.some((x) => x.id === created.id) ? p : [created, ...p])); toast("Task created", "success");
         await logActivity(created.id, "created", `Created "${data.task}"`, actor);
@@ -251,6 +255,23 @@ export default function TasksPage() {
       else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
     }
     setTaskModalOpen(false); setEditingTask(null);
+  };
+
+  const handleSaveService = async (data: Omit<Task, "id" | "created_at">) => {
+    const actor = userName || "Manager";
+    if (serviceEditingTask) {
+      const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", serviceEditingTask.id).select().single();
+      if (!error && updated) { setTasks((p) => p.map((t) => (t.id === serviceEditingTask.id ? updated : t))); toast("Task updated", "success"); }
+    } else {
+      const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
+      if (!error && created) { setTasks((p) => (p.some((x) => x.id === created.id) ? p : [created, ...p])); toast("Service task created", "success");
+        await logActivity(created.id, "created", `Created service task "${data.task}"`, actor);
+        const assigneeList = [data.assigned_to, ...(data.extra_assignees ?? [])].filter((n): n is string => !!n && n !== actor);
+        if (assigneeList.length > 0) await createNotification(`New service task "${data.task}"`, "success", created.id, assigneeList);
+        setShareTasks([created]); }
+      else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
+    }
+    setServiceModalOpen(false); setServiceEditingTask(null);
   };
 
   // For supervisor: only show their supervisors list (just themselves)
@@ -295,7 +316,7 @@ export default function TasksPage() {
               </>
             )}
             {canCreateTask && !selectMode && (
-              <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
+              <button onClick={() => { setEditingTask(null); setServiceEditingTask(null); setTaskTypeSelectOpen(true); }}
                 className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
                 <Plus className="w-4 h-4" /> New Task
               </button>
@@ -316,6 +337,20 @@ export default function TasksPage() {
             <button onClick={() => setFilterStatus("Completed")}
               className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterStatus === "Completed" ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600"}`}>
               Completed
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setFilterTaskType("All")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterTaskType === "All" ? "bg-primary-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              All Types
+            </button>
+            <button onClick={() => setFilterTaskType("production")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterTaskType === "production" ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-violet-50 hover:text-violet-600"}`}>
+              Production
+            </button>
+            <button onClick={() => setFilterTaskType("service")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterTaskType === "service" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600"}`}>
+              Service
             </button>
           </div>
           {(!isEmployee || hasTaskCreateAccess) && (
@@ -367,7 +402,10 @@ export default function TasksPage() {
                 canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!) || isMyCreatedTask)))}
                 onStatusChange={handleStatusChange}
                 onPriorityChange={(canEditTask || isMyCreatedTask) && !selectMode ? handlePriorityChange : undefined}
-                onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
+                onEdit={(task) => {
+                  if (task.task_type === "service") { setServiceEditingTask(task); setServiceModalOpen(true); }
+                  else { setEditingTask(task); setTaskModalOpen(true); }
+                }}
                 onDelete={handleDelete}
                 onViewDetail={!selectMode ? (task) => setDetailTask(task) : undefined}
                 onShare={!selectMode ? (task) => setShareTasks([task]) : undefined}
@@ -381,9 +419,36 @@ export default function TasksPage() {
             )}
         </div>
       </div>
+      {/* Task type selector */}
+      {taskTypeSelectOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setTaskTypeSelectOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">New Task</h2>
+            <p className="text-sm text-gray-400 mb-5">What type of task are you creating?</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => { setTaskTypeSelectOpen(false); setTaskModalOpen(true); }}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-violet-200 hover:border-violet-500 hover:bg-violet-50 transition group">
+                <span className="text-2xl">⚙️</span>
+                <span className="text-sm font-bold text-gray-800 group-hover:text-violet-700">Production</span>
+                <span className="text-[11px] text-gray-400 text-center">Machine work & project tasks</span>
+              </button>
+              <button onClick={() => { setTaskTypeSelectOpen(false); setServiceModalOpen(true); }}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-50 transition group">
+                <span className="text-2xl">🔧</span>
+                <span className="text-sm font-bold text-gray-800 group-hover:text-blue-700">Service</span>
+                <span className="text-[11px] text-gray-400 text-center">Field service & support tasks</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} projects={projects} roleName={roleName}
+        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
+      <ServiceTaskModal open={serviceModalOpen} task={serviceEditingTask}
+        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} roleName={roleName}
+        onClose={() => { setServiceModalOpen(false); setServiceEditingTask(null); }} onSave={handleSaveService} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <ShareTaskModal open={shareTasks.length > 0} tasks={shareTasks} onClose={() => setShareTasks([])} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}

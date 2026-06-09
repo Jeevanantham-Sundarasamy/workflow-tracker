@@ -115,6 +115,7 @@ export default function TaskModal({
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
       project_id: form.project_id || null,
+      task_type: "production" as const,
     };
 
     // When editing, save just the single task. When creating, split into multiple

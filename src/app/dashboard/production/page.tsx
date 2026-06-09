@@ -56,6 +56,17 @@ export default function ProductionPage() {
         return { ...p, machine_type_name: mtMap[p.machine_type_id] || "Unknown", progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, total: tasks.length, done };
       });
 
+      // Auto-complete any Active project where all tasks are Done
+      const toComplete = projectsWithProgress.filter(
+        (p) => p.status === "Active" && p.total > 0 && p.done === p.total
+      );
+      if (toComplete.length > 0) {
+        await Promise.all(toComplete.map((p) =>
+          supabase.from("projects").update({ status: "Completed" }).eq("id", p.id)
+        ));
+        toComplete.forEach((p) => { p.status = "Completed"; });
+      }
+
       setProjects(projectsWithProgress);
       setMachineTypes(mts);
       setCustomers(cRes.data || []);
@@ -166,10 +177,13 @@ export default function ProductionPage() {
     else toast("Update failed", "error");
   };
 
-  const deleteProject = async (id: string, name: string) => {
-    if (!confirm(`Delete project "${name}" and all its tasks?`)) return;
-    const { error } = await supabase.from("projects").delete().eq("id", id);
-    if (!error) { setProjects((p) => p.filter((pr) => pr.id !== id)); toast("Deleted", "success"); }
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+
+  const deleteProject = async () => {
+    if (!deleteConfirm) return;
+    const { error } = await supabase.from("projects").delete().eq("id", deleteConfirm.id);
+    if (!error) { setProjects((p) => p.filter((pr) => pr.id !== deleteConfirm.id)); toast("Deleted", "success"); }
+    setDeleteConfirm(null);
   };
 
   const today = new Date().toISOString().split("T")[0];
@@ -310,7 +324,7 @@ export default function ProductionPage() {
                             className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-lg transition">
                             <Pencil className="w-3 h-3" />
                           </button>
-                          <button onClick={() => deleteProject(p.id, p.serial_number)}
+                          <button onClick={() => setDeleteConfirm({ id: p.id, name: p.serial_number })}
                             className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition">
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -495,6 +509,30 @@ export default function ProductionPage() {
                 <button onClick={() => setEditModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-gray-500 hover:bg-gray-50 transition">Cancel</button>
                 <button onClick={handleEdit} className="flex-1 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition">Save</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Delete Project?</h3>
+                <p className="text-sm text-gray-500 mt-0.5">This will also delete all project tasks.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 mb-5 font-medium">{deleteConfirm.name}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-gray-500 hover:bg-gray-50 transition">Cancel</button>
+              <button onClick={deleteProject}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition shadow-sm">Delete</button>
             </div>
           </div>
         </div>

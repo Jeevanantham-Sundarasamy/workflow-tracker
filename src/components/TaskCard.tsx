@@ -76,11 +76,13 @@ function TaskCard({
   return (
     <>
     <div
-      className={`bg-white rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md ${
-        selected ? "ring-2 ring-primary-500 border-primary-300" :
-        isOverdue
-          ? "border-l-4 border-l-red-400 border-t-border border-r-border border-b-border"
-          : "border-border"
+      className={`rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md ${
+        selected ? "bg-white ring-2 ring-primary-500 border-primary-300" :
+        task.task_type === "service"
+          ? "bg-blue-50 border-l-4 border-l-blue-500 border-t-blue-200 border-r-blue-200 border-b-blue-200 hover:shadow-blue-100"
+          : isOverdue
+          ? "bg-white border-l-4 border-l-red-400 border-t-border border-r-border border-b-border"
+          : "bg-white border-border"
       }`}
     >
       {/* Header */}
@@ -99,6 +101,11 @@ function TaskCard({
             <h3 className="text-sm font-bold text-gray-900 truncate">
               {task.task}
             </h3>
+            {task.task_type === "service" && (
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white bg-blue-500 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                🔧 Service
+              </span>
+            )}
             {isOverdue && (
               <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
                 Overdue
@@ -117,10 +124,12 @@ function TaskCard({
 
       {/* Meta */}
       <div className="flex flex-wrap gap-3 sm:gap-4 text-xs text-gray-500 mb-3">
-        <span className="flex items-center gap-1.5">
-          <User className="w-3.5 h-3.5" />
-          {task.supervisor}
-        </span>
+        {task.supervisor && (
+          <span className="flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" />
+            {task.supervisor}
+          </span>
+        )}
         {task.assigned_to && (
           <span className="flex items-center gap-1.5 text-blue-600">
             <UserCircle className="w-3.5 h-3.5" />

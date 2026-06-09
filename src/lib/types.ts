@@ -17,6 +17,7 @@ export interface Task {
   completed_at?: string | null;
   customer_id?: string | null;
   project_id?: string | null;
+  task_type?: "production" | "service" | null;
 }
 
 export interface Customer {

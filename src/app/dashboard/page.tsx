@@ -10,6 +10,7 @@ import Topbar from "@/components/Topbar";
 import StatsCards from "@/components/StatsCards";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
+import ServiceTaskModal from "@/components/ServiceTaskModal";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import SupervisorGrid from "@/components/SupervisorGrid";
 import StatusChart from "@/components/StatusChart";
@@ -28,7 +29,7 @@ export default function DashboardPage() {
   const [employeeRecords, setEmployeeRecords] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<{ name: string; supervisor_names: string[] | null }[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; serial_number: string; customer_name: string; machine_type_name: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
@@ -38,8 +39,11 @@ export default function DashboardPage() {
   const [filterMgr, setFilterMgr] = useState("All");
   const [filterDept, setFilterDept] = useState("All");
   const [filterCustomer, setFilterCustomer] = useState("All");
+  const [taskTypeSelectOpen, setTaskTypeSelectOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [serviceEditingTask, setServiceEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   const loadData = useCallback(async () => {
@@ -50,7 +54,7 @@ export default function DashboardPage() {
         supabase.from("employees").select("*").order("name"),
         supabase.from("managers").select("*").order("name"),
         supabase.from("customers").select("*").order("name"),
-        supabase.from("projects").select("*").eq("status", "Active").order("created_at", { ascending: false }),
+        supabase.from("projects").select("*").order("created_at", { ascending: false }),
         supabase.from("machine_types").select("id, name"),
       ]);
       if (tr.error) throw tr.error;
@@ -66,11 +70,12 @@ export default function DashboardPage() {
       setManagers((mr.data || []).map((m: { name: string }) => m.name));
       setCustomers(cr.data || []);
       const mtMap = Object.fromEntries((mtR.data || []).map((mt: { id: number; name: string }) => [String(mt.id), mt.name]));
-      setProjects((pr.data || []).map((p: { id: string; machine_type_id: string; serial_number: string; customer_name: string }) => ({
+      setProjects((pr.data || []).map((p: { id: string; machine_type_id: string; serial_number: string; customer_name: string; status: string }) => ({
         id: p.id,
         serial_number: p.serial_number,
         customer_name: p.customer_name,
         machine_type_name: mtMap[String(p.machine_type_id)] || "",
+        status: p.status,
       })));
     } catch { /* offline */ }
     setLoading(false);
@@ -195,6 +200,21 @@ export default function DashboardPage() {
     setTaskModalOpen(false); setEditingTask(null);
   };
 
+  const handleSaveService = async (data: Omit<Task, "id" | "created_at">) => {
+    if (serviceEditingTask) {
+      const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", serviceEditingTask.id).select().single();
+      if (!error && updated) { setTasks((p) => p.map((t) => (t.id === serviceEditingTask.id ? updated : t))); toast("Task updated", "success"); }
+      else toast("Update failed", "error");
+    } else {
+      const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
+      if (!error && created) { setTasks((p) => (p.some((x) => x.id === created.id) ? p : [created, ...p])); toast("Service task created", "success");
+        const assigneeList = [data.assigned_to, ...(data.extra_assignees ?? [])].filter((n): n is string => !!n && n !== roleName);
+        if (assigneeList.length > 0) await createNotification(`New service task "${data.task}"`, "success", created.id, assigneeList); }
+      else toast("Creation failed", "error");
+    }
+    setServiceModalOpen(false); setServiceEditingTask(null);
+  };
+
   const handleExport = () => {
     const blob = new Blob([JSON.stringify({ tasks, supervisors, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -289,7 +309,7 @@ export default function DashboardPage() {
                     </>
                   )}
                   {canCreateTask && (
-                    <button onClick={() => { setEditingTask(null); setTaskModalOpen(true); }}
+                    <button onClick={() => { setEditingTask(null); setServiceEditingTask(null); setTaskTypeSelectOpen(true); }}
                       className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-xl transition shadow-sm">
                       <Plus className="w-3.5 h-3.5" /> New Task</button>
                   )}
@@ -300,7 +320,10 @@ export default function DashboardPage() {
                       canChangeStatus={hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!)))}
                       onStatusChange={handleStatusChange}
                       onPriorityChange={canEditTask ? handlePriorityChange : undefined}
-                      onEdit={(task) => { setEditingTask(task); setTaskModalOpen(true); }}
+                      onEdit={(task) => {
+                        if (task.task_type === "service") { setServiceEditingTask(task); setServiceModalOpen(true); }
+                        else { setEditingTask(task); setTaskModalOpen(true); }
+                      }}
                       onDelete={handleDelete} onViewDetail={(task) => setDetailTask(task)} />
                   )) : (
                     <div className="bg-white rounded-2xl border border-border p-12 text-center">
@@ -360,9 +383,35 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {taskTypeSelectOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setTaskTypeSelectOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">New Task</h2>
+            <p className="text-sm text-gray-400 mb-5">What type of task are you creating?</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => { setTaskTypeSelectOpen(false); setTaskModalOpen(true); }}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-violet-200 hover:border-violet-500 hover:bg-violet-50 transition group">
+                <span className="text-2xl">⚙️</span>
+                <span className="text-sm font-bold text-gray-800 group-hover:text-violet-700">Production</span>
+                <span className="text-[11px] text-gray-400 text-center">Machine work & project tasks</span>
+              </button>
+              <button onClick={() => { setTaskTypeSelectOpen(false); setServiceModalOpen(true); }}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-50 transition group">
+                <span className="text-2xl">🔧</span>
+                <span className="text-sm font-bold text-gray-800 group-hover:text-blue-700">Service</span>
+                <span className="text-[11px] text-gray-400 text-center">Field service & support tasks</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} projects={projects} roleName={roleName}
+        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
+      <ServiceTaskModal open={serviceModalOpen} task={serviceEditingTask}
+        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} roleName={roleName}
+        onClose={() => { setServiceModalOpen(false); setServiceEditingTask(null); }} onSave={handleSaveService} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}
         onSubmit={async (pin) => { const ok = await login(pin); if (ok) { setPinModalOpen(false); toast("Welcome!", "success"); } return ok; }} />

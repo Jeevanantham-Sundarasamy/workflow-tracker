@@ -111,9 +111,20 @@ export default function ProjectDetailPage() {
     else { updates.completed_at = null; updates.qc_status = null; updates.qc_by = null; updates.qc_at = null; }
     const { error } = await supabase.from("project_tasks").update(updates).eq("id", taskId);
     if (!error) {
-      setTasks((p) => p.map((t) => t.id === taskId ? { ...t, ...updates } as ProjectTask : t));
+      const updatedTasks = tasks.map((t) => t.id === taskId ? { ...t, ...updates } as ProjectTask : t);
+      setTasks(updatedTasks);
       logTaskActivity(taskId, "status_changed", `${task?.status} → ${status}`);
       toast("Status updated", "success");
+
+      // Auto-complete project when all tasks are done
+      if (status === "Done" && project?.status === "Active") {
+        const allDone = updatedTasks.every((t) => t.status === "Done");
+        if (allDone) {
+          await supabase.from("projects").update({ status: "Completed" }).eq("id", projectId);
+          setProject((p) => p ? { ...p, status: "Completed" } : p);
+          toast("🎉 All tasks done — project marked Completed!", "success");
+        }
+      }
     }
   };
 
@@ -182,6 +193,33 @@ export default function ProjectDetailPage() {
     if (!error) {
       setTasks((p) => p.filter((t) => t.id !== taskId));
       toast("Task deleted", "success");
+    }
+  };
+
+  const markDeptDone = async (dept: string) => {
+    const pending = getDeptTasks(dept).filter((t) => t.status !== "Done");
+    if (!pending.length) return;
+    const now = new Date().toISOString();
+    const ids = pending.map((t) => t.id);
+    const { error } = await supabase.from("project_tasks")
+      .update({ status: "Done", completed_at: now })
+      .in("id", ids);
+    if (!error) {
+      const updatedTasks = tasks.map((t) => ids.includes(t.id) ? { ...t, status: "Done" as ProjectTask["status"], completed_at: now } : t);
+      setTasks(updatedTasks);
+      toast(`${dept} — all tasks marked done`, "success");
+
+      // Auto-complete project when all tasks are done
+      if (project?.status === "Active") {
+        const allDone = updatedTasks.every((t) => t.status === "Done");
+        if (allDone) {
+          await supabase.from("projects").update({ status: "Completed" }).eq("id", projectId);
+          setProject((p) => p ? { ...p, status: "Completed" } : p);
+          toast("🎉 All tasks done — project marked Completed!", "success");
+        }
+      }
+    } else {
+      toast("Failed to update", "error");
     }
   };
 
@@ -327,6 +365,18 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
+                    {canManageTask && deptProgress < 100 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); markDeptDone(dept); }}
+                        className="text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Overall Done
+                      </button>
+                    )}
+                    {deptProgress === 100 && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Complete
+                      </span>
+                    )}
                     <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${deptProgress === 100 ? "bg-emerald-500" : "bg-blue-500"}`}
                         style={{ width: `${deptProgress}%` }} />
