@@ -13,6 +13,7 @@ interface TaskModalProps {
   supervisors: string[];
   employees?: { name: string; supervisor_names: string[] | null }[];
   projects?: ProjectOption[];
+  customers?: { id: string; name: string }[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -24,6 +25,7 @@ export default function TaskModal({
   supervisors,
   employees = [],
   projects = [],
+  customers = [],
   roleName = "Admin",
   onClose,
   onSave,
@@ -41,12 +43,18 @@ export default function TaskModal({
     assigned_to_type: "supervisor" as "supervisor" | "employee",
     extra_assignees: [] as string[],
     project_id: "" as string,
+    customer_id: "" as string,
   });
   // Extra task lines — when creating, each one becomes its own task row (same assignees)
   const [extraTasks, setExtraTasks] = useState<string[]>([]);
 
   useEffect(() => {
     if (task) {
+      const projCustomerName = task.project_id
+        ? projects.find((p) => String(p.id) === String(task.project_id))?.customer_name
+        : undefined;
+      const resolvedCustomerId = task.customer_id ||
+        (projCustomerName ? customers.find((c) => c.name === projCustomerName)?.id : undefined) || "";
       setForm({
         task: task.task,
         supervisor: task.supervisor,
@@ -60,6 +68,7 @@ export default function TaskModal({
         assigned_to_type: task.assigned_to_type || "supervisor",
         extra_assignees: task.extra_assignees || [],
         project_id: task.project_id || "",
+        customer_id: resolvedCustomerId,
       });
       setExtraTasks([]);
     } else {
@@ -76,10 +85,11 @@ export default function TaskModal({
         assigned_to_type: "supervisor",
         extra_assignees: [],
         project_id: "",
+        customer_id: "",
       });
       setExtraTasks([]);
     }
-  }, [task, open, supervisors]);
+  }, [task, open, supervisors, projects, customers]);
 
   if (!open) return null;
 
@@ -115,6 +125,7 @@ export default function TaskModal({
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.length > 0 ? form.extra_assignees : null,
       project_id: form.project_id || null,
+      customer_id: form.customer_id || null,
       task_type: "production" as const,
     };
 
@@ -311,7 +322,11 @@ export default function TaskModal({
               <>
                 <select
                   value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  onChange={(e) => {
+                    const proj = projects.find((p) => p.id === e.target.value);
+                    const matchedCustomer = proj ? customers.find((c) => c.name === proj.customer_name) : null;
+                    setForm({ ...form, project_id: e.target.value, customer_id: matchedCustomer?.id || form.customer_id });
+                  }}
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
                 >
                   <option value="">Select project...</option>
@@ -332,6 +347,23 @@ export default function TaskModal({
               </>
             )}
           </div>
+
+          {/* Customer */}
+          {customers.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer</label>
+              <select
+                value={form.customer_id}
+                onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition"
+              >
+                <option value="">No customer</option>
+                {customers.filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Row: Due Date + Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

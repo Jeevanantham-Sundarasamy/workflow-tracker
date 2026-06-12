@@ -149,6 +149,18 @@ export default function TasksPage() {
     if (filterSup !== "All" && t.supervisor !== filterSup) return false;
     if (filterEmp !== "All" && t.assigned_to !== filterEmp && !(t.extra_assignees ?? []).includes(filterEmp)) return false;
     if (filterProject !== "All" && t.project_id !== filterProject) return false;
+    if (filterCustomer !== "All") {
+      let matched = false;
+      if (t.customer_id) {
+        const cName = customers.find((c) => String(c.id) === String(t.customer_id))?.name;
+        if (cName === filterCustomer) matched = true;
+      }
+      if (!matched && t.project_id) {
+        const proj = projects.find((p) => String(p.id) === String(t.project_id));
+        if (proj?.customer_name === filterCustomer) matched = true;
+      }
+      if (!matched) return false;
+    }
     if (filterTaskType !== "All" && (t.task_type || "production") !== filterTaskType) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
@@ -377,6 +389,15 @@ export default function TasksPage() {
               ))}
             </select>
           )}
+          {customers.length > 0 && (
+            <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
+              className="w-full sm:w-auto text-xs font-semibold px-3 py-2 rounded-lg border border-border bg-white cursor-pointer focus:outline-none">
+              <option value="All">All Customers</option>
+              {customers
+                .filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i)
+                .map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+            </select>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
               <label className="text-xs font-semibold text-gray-600">{filterStatus === "Completed" ? "Completed From" : "Due From"}</label>
               <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
@@ -396,7 +417,12 @@ export default function TasksPage() {
             filtered.length ? filtered.map((t) => {
               const isMyPorterTask = t.task.startsWith("Porter Booking") && t.assigned_to === userName;
               const isMyCreatedTask = hasTaskCreateAccess && t.created_by === userName;
-              return <TaskCard key={t.id} task={t}
+              const customerName = t.customer_id
+                ? customers.find((c) => String(c.id) === String(t.customer_id))?.name
+                : t.project_id
+                  ? projects.find((p) => String(p.id) === String(t.project_id))?.customer_name
+                  : undefined;
+              return <TaskCard key={t.id} task={t} customerName={customerName}
                 canEdit={(canEditTask || isMyPorterTask || isMyCreatedTask) && !selectMode}
                 canDelete={(canDeleteTask || isMyPorterTask || isMyCreatedTask) && !selectMode}
                 canChangeStatus={!selectMode && (hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!) || isMyCreatedTask)))}
@@ -444,10 +470,10 @@ export default function TasksPage() {
         </div>
       )}
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} roleName={roleName}
+        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} customers={customers} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <ServiceTaskModal open={serviceModalOpen} task={serviceEditingTask}
-        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} roleName={roleName}
+        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} customers={customers} roleName={roleName}
         onClose={() => { setServiceModalOpen(false); setServiceEditingTask(null); }} onSave={handleSaveService} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <ShareTaskModal open={shareTasks.length > 0} tasks={shareTasks} onClose={() => setShareTasks([])} />

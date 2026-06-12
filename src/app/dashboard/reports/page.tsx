@@ -9,10 +9,11 @@ import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import {
   FileText, FileSpreadsheet, RefreshCw, TrendingUp,
-  CheckCircle2, Clock, AlertCircle, BarChart2, PauseCircle, User,
+  CheckCircle2, Clock, AlertCircle, BarChart2, PauseCircle, User, Building2,
 } from "lucide-react";
 
 type ReportType = "daily" | "weekly" | "custom";
+type ReportMode = "employee" | "customer";
 
 function getMonday(d: Date): Date {
   const day = d.getDay();
@@ -86,11 +87,15 @@ export default function ReportsPage() {
   const [commentsByTask, setCommentsByTask] = useState<Record<string, Comment[]>>({});
   const [allEmployees, setAllEmployees] = useState<{ name: string; supervisor_name: string | null }[]>([]);
   const [allSupervisors, setAllSupervisors] = useState<string[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; customer_name: string }[]>([]);
   const [fetching, setFetching] = useState(false);
   const [reportType, setReportType] = useState<ReportType>("daily");
+  const [reportMode, setReportMode] = useState<ReportMode>("employee");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [reportData, setReportData] = useState<Task[] | null>(null);
+  const [filterName, setFilterName] = useState("");
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -98,15 +103,19 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchData = async () => {
       setFetching(true);
-      const [{ data: taskData }, { data: commentData }, { data: empData }, { data: supData }] = await Promise.all([
+      const [{ data: taskData }, { data: commentData }, { data: empData }, { data: supData }, { data: custData }, { data: projData }] = await Promise.all([
         supabase.from("tasks").select("*").order("due_date", { ascending: true }),
         supabase.from("comments").select("*").order("created_at", { ascending: false }),
         supabase.from("employees").select("name, supervisor_name").order("name"),
         supabase.from("supervisors").select("name").order("name"),
+        supabase.from("customers").select("id, name").order("name"),
+        supabase.from("projects").select("id, customer_name").order("id"),
       ]);
       setTasks(taskData || []);
       setAllEmployees((empData || []) as { name: string; supervisor_name: string | null }[]);
       setAllSupervisors(((supData || []) as { name: string }[]).map(s => s.name));
+      setCustomers((custData || []) as { id: string; name: string }[]);
+      setProjects((projData || []) as { id: string; customer_name: string }[]);
       const grouped: Record<string, Comment[]> = {};
       for (const c of (commentData || []) as Comment[]) {
         if (!grouped[c.task_id]) grouped[c.task_id] = [];
@@ -147,6 +156,19 @@ export default function ReportsPage() {
       return due >= from && due <= to;
     });
     setReportData(filtered);
+    setFilterName("");
+  };
+
+  const getCustomerName = (t: Task): string => {
+    if (t.customer_id) {
+      const c = customers.find((c) => String(c.id) === String(t.customer_id));
+      if (c) return c.name;
+    }
+    if (t.project_id) {
+      const p = projects.find((p) => String(p.id) === String(t.project_id));
+      if (p?.customer_name) return p.customer_name;
+    }
+    return "No Customer";
   };
 
   const getTaskNotes = (t: Task): string => {
@@ -203,6 +225,39 @@ export default function ReportsPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   })();
 
+  const groupedByCustomer = (() => {
+    if (!reportData) return [];
+    const map: Record<string, Task[]> = {};
+    for (const t of reportData) {
+      const cName = getCustomerName(t);
+      if (!map[cName]) map[cName] = [];
+      map[cName].push(t);
+    }
+    return Object.entries(map)
+      .map(([name, tasks]) => ({
+        name,
+        tasks: [...tasks].sort((a, b) => {
+          const sa = STATUS_SORT[getDisplayStatus(a)] ?? 9;
+          const sb = STATUS_SORT[getDisplayStatus(b)] ?? 9;
+          return sa - sb;
+        }),
+      }))
+      .sort((a, b) => {
+        if (a.name === "No Customer") return 1;
+        if (b.name === "No Customer") return -1;
+        return a.name.localeCompare(b.name);
+      });
+  })();
+
+  // Filtered groups — respect individual name filter
+  const visibleEmployeeGroups = filterName
+    ? groupedReport.filter((g) => g.name === filterName)
+    : groupedReport;
+
+  const visibleCustomerGroups = filterName
+    ? groupedByCustomer.filter((g) => g.name === filterName)
+    : groupedByCustomer;
+
   const summary = reportData
     ? {
         total: reportData.length,
@@ -218,9 +273,10 @@ export default function ReportsPage() {
 
   const getFileName = () => {
     const { from, to } = getDateRange();
-    if (reportType === "daily") return `Daily_Report_${from}`;
-    if (reportType === "weekly") return `Weekly_Report_${from}_to_${to}`;
-    return `Custom_Report_${from}_to_${to}`;
+    const suffix = reportMode === "customer" ? "_By_Customer" : "";
+    if (reportType === "daily") return `Daily_Report_${from}${suffix}`;
+    if (reportType === "weekly") return `Weekly_Report_${from}_to_${to}${suffix}`;
+    return `Custom_Report_${from}_to_${to}${suffix}`;
   };
 
   const excelNotes = (t: Task): string => {
@@ -235,6 +291,102 @@ export default function ReportsPage() {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     wb.creator = "Workflow Tracker";
+
+    // ── Customer mode — grouped by customer ──
+    if (reportMode === "customer") {
+      const ws = wb.addWorksheet("Customer Report", { views: [{ state: "frozen", ySplit: 5 }] });
+      ws.columns = [
+        { key: "no",       width: 4  },
+        { key: "task",     width: 36 },
+        { key: "assignee", width: 16 },
+        { key: "status",   width: 13 },
+        { key: "notes",    width: 28 },
+        { key: "due",      width: 13 },
+        { key: "priority", width: 9  },
+        { key: "done",     width: 8  },
+      ];
+      const { from, to } = getDateRange();
+      const borderThinC = (argb = "FFD1D5DB") => ({ style: "thin" as const, color: { argb } });
+      const cellBorderC = { top: borderThinC(), bottom: borderThinC(), left: borderThinC(), right: borderThinC() };
+      const STATUS_FILL: Record<string, string> = { Done: "FFD1FAE5", "In Progress": "FFDBEAFE", "On Hold": "FFFEF9C3", Delayed: "FFFFE4B5", Overdue: "FFFECACA", Pending: "FFF3F4F6", Cancelled: "FFE5E7EB" };
+      const STATUS_FONT_C: Record<string, string> = { Done: "FF065F46", "In Progress": "FF1E40AF", "On Hold": "FF854D0E", Delayed: "FF9A3412", Overdue: "FF991B1B", Pending: "FF374151", Cancelled: "FF6B7280" };
+      const PRIORITY_FONT: Record<string, string> = { High: "FF991B1B", Medium: "FF92400E", Low: "FF14532D" };
+
+      const titleRow = ws.addRow([getFileName().replace(/_/g, " ")]);
+      ws.mergeCells("A1:H1");
+      titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF1E1E2E" } };
+      titleRow.height = 22;
+
+      const periodRow = ws.addRow([`Period: ${formatDate(from)} - ${formatDate(to)}   |   Generated: ${formatDate(new Date().toLocaleDateString("en-CA"))}`]);
+      ws.mergeCells("A2:H2");
+      periodRow.getCell(1).font = { size: 9, color: { argb: "FF888888" } };
+      periodRow.height = 16;
+
+      if (summary) {
+        const sumRow = ws.addRow([`Total: ${summary.total}    Done: ${summary.completed}    In Progress: ${summary.inProgress}    On Hold: ${summary.onHold}    Overdue: ${summary.overdue}    Rate: ${summary.rate}%`]);
+        ws.mergeCells("A3:H3");
+        sumRow.getCell(1).font = { size: 9, bold: true, color: { argb: "FF3B3B5C" } };
+        sumRow.height = 16;
+      } else { ws.addRow([]); }
+      ws.addRow([]);
+
+      let rowNum = 4;
+      for (const group of visibleCustomerGroups) {
+        rowNum++;
+        const custRow = ws.addRow(["", group.name, "", `${group.tasks.filter(t => t.status === "Done").length}/${group.tasks.length} Done`, "", "", "", ""]);
+        ws.mergeCells(`B${rowNum}:C${rowNum}`);
+        ws.mergeCells(`D${rowNum}:H${rowNum}`);
+        custRow.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+          cell.font = { bold: true, size: 9, color: { argb: "FFB45309" } };
+          cell.alignment = { vertical: "middle" };
+          cell.border = cellBorderC;
+        });
+
+        // Column header row
+        rowNum++;
+        const hRow = ws.addRow(["#", "Task", "Assignee", "Status", "Notes / Reason", "Due Date", "Priority", "Done %"]);
+        hRow.height = 18;
+        hRow.eachCell((cell, colNum) => {
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colNum % 2 === 0 ? "FF6D67F0" : "FF4F46E5" } };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+          cell.border = cellBorderC;
+        });
+
+        group.tasks.forEach((t, idx) => {
+          rowNum++;
+          const ds = getDisplayStatus(t);
+          const pct = getCompletionPct(t.status);
+          const taskRow = ws.addRow([idx + 1, t.task, t.assigned_to || t.supervisor || "-", ds, excelNotes(t), formatDate(t.due_date), t.priority, `${pct}%`]);
+          taskRow.eachCell((cell, colNum) => {
+            cell.alignment = { vertical: "middle", wrapText: true };
+            cell.border = cellBorderC;
+            cell.font = { size: 9 };
+            if (colNum === 4) {
+              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: STATUS_FILL[ds] || "FFF9FAFB" } };
+              cell.font = { bold: true, size: 8.5, color: { argb: STATUS_FONT_C[ds] || "FF374151" } };
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            }
+            if (colNum === 7) { cell.font = { bold: true, size: 9, color: { argb: PRIORITY_FONT[t.priority] || "FF374151" } }; cell.alignment = { vertical: "middle", horizontal: "center" }; }
+            if (colNum === 8) { cell.font = { bold: true, size: 9, color: { argb: pct === 100 ? "FF065F46" : pct >= 50 ? "FF1E40AF" : "FF92400E" } }; cell.alignment = { vertical: "middle", horizontal: "center" }; }
+            if (colNum === 1) { cell.alignment = { vertical: "middle", horizontal: "center" }; cell.font = { size: 8.5, color: { argb: "FF9CA3AF" } }; }
+          });
+        });
+
+        rowNum++;
+        ws.addRow([]);
+      }
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `${getFileName()}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+      toast("Excel downloaded", "success");
+      return;
+    }
+
     const ws = wb.addWorksheet("Report", { views: [{ state: "frozen", ySplit: 5 }] });
 
     // ── Fixed column widths — tight but readable ──
@@ -337,8 +489,8 @@ export default function ReportsPage() {
 
     let dataRowNum = 5; // header is row 5 (1-indexed in excel)
 
-    const groupsWithTasks = groupedReport.filter(g => g.tasks.length > 0);
-    const groupsNoTasks   = groupedReport.filter(g => g.tasks.length === 0);
+    const groupsWithTasks = visibleEmployeeGroups.filter(g => g.tasks.length > 0);
+    const groupsNoTasks   = filterName ? [] : groupedReport.filter(g => g.tasks.length === 0);
 
     for (const group of groupsWithTasks) {
       // ── Employee header row ──
@@ -509,6 +661,66 @@ export default function ReportsPage() {
       doc.setTextColor(30, 30, 30);
       doc.text(safe(getFileName().replace(/_/g, " ")), 14, 15);
 
+      // ── Customer mode PDF ──
+      if (reportMode === "customer") {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(110, 110, 110);
+        doc.text(`Period: ${formatDate(from)} - ${formatDate(to)}   |   Generated: ${formatDate(new Date().toLocaleDateString("en-CA"))}`, 14, 22);
+        if (summary) {
+          doc.setFontSize(8); doc.setTextColor(50, 50, 50);
+          doc.text(`Total: ${summary.total}   Done: ${summary.completed}   In Progress: ${summary.inProgress}   On Hold: ${summary.onHold}   Overdue: ${summary.overdue}   Rate: ${summary.rate}%`, 14, 29);
+        }
+        let currentY = 34;
+        const PDF_USABLE_H = 175;
+        for (const group of visibleCustomerGroups) {
+          if (currentY > PDF_USABLE_H - 20 && group !== groupedByCustomer[0]) { doc.addPage(); currentY = 14; }
+          const done = group.tasks.filter(t => t.status === "Done").length;
+          doc.setFillColor(255, 247, 237);
+          doc.rect(14, currentY, pageW - 28, 7, "F");
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(180, 83, 9);
+          doc.text(safe(group.name), 17, currentY + 5);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(120, 90, 20);
+          doc.text(`${done}/${group.tasks.length} Done`, 170, currentY + 5);
+          if (group.tasks.length === 0) { currentY += 9; continue; }
+          const tableRows = group.tasks.map((t, i) => [
+            i + 1, safe(t.task), safe(t.assigned_to || t.supervisor || "-"),
+            getDisplayStatus(t), safe(pdfNotes(t)), formatDate(t.due_date), t.priority, `${getCompletionPct(t.status)}%`,
+          ]);
+          autoTable(doc, {
+            startY: currentY + 8,
+            showHead: "everyPage",
+            head: [["#", "Task", "Assignee", "Status", "Notes / Reason", "Due Date", "Priority", "Done %"]],
+            body: tableRows,
+            styles: { fontSize: 7.5, cellPadding: { top: 1.8, bottom: 1.8, left: 2.5, right: 2.5 }, overflow: "linebreak", font: "helvetica", textColor: [30, 30, 30], lineColor: [220, 220, 220], lineWidth: 0.1 },
+            headStyles: { fillColor: [180, 83, 9], textColor: 255, fontStyle: "bold", fontSize: 7, font: "helvetica", cellPadding: { top: 2, bottom: 2, left: 2.5, right: 2.5 } },
+            columnStyles: { 0: { cellWidth: 8, halign: "center" }, 1: { cellWidth: 70 }, 2: { cellWidth: 30 }, 3: { cellWidth: 22 }, 4: { cellWidth: 75 }, 5: { cellWidth: 25 }, 6: { cellWidth: 18 }, 7: { cellWidth: 21, halign: "center" } },
+            didParseCell: (data) => {
+              if (data.section === "body") {
+                const status = String((data.row.raw as (string | number)[])[3]);
+                if      (status === "Done")        data.cell.styles.fillColor = [236, 253, 245];
+                else if (status === "In Progress") data.cell.styles.fillColor = [239, 246, 255];
+                else if (status === "Overdue")     data.cell.styles.fillColor = [255, 228, 228];
+                else if (status === "Delayed")     data.cell.styles.fillColor = [255, 237, 213];
+                else if (status === "On Hold")     data.cell.styles.fillColor = [254, 252, 232];
+                else if (status === "Cancelled")   data.cell.styles.fillColor = [245, 245, 245];
+              }
+            },
+            alternateRowStyles: { fillColor: false },
+            margin: { left: 14, right: 14 },
+          });
+          currentY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 5;
+        }
+        const pageCount = doc.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i); doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(160, 160, 160);
+          doc.text(`Page ${i} of ${pageCount}`, pageW - 22, doc.internal.pageSize.getHeight() - 5);
+        }
+        doc.save(`${getFileName()}.pdf`);
+        toast("PDF downloaded", "success");
+        return;
+      }
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(110, 110, 110);
@@ -527,8 +739,8 @@ export default function ReportsPage() {
       }
 
       // ── Separate groups with/without tasks ──
-      const pdfWithTasks = groupedReport.filter(g => g.tasks.length > 0);
-      const pdfNoTasks   = groupedReport.filter(g => g.tasks.length === 0);
+      const pdfWithTasks = visibleEmployeeGroups.filter(g => g.tasks.length > 0);
+      const pdfNoTasks   = filterName ? [] : groupedReport.filter(g => g.tasks.length === 0);
 
       // ── Pre-bucket groups with tasks into pages ──
       const PDF_USABLE_H = 175;
@@ -724,18 +936,89 @@ export default function ReportsPage() {
             Report Settings
           </h2>
 
-          <div className="flex gap-2 flex-wrap">
-            {(["daily", "weekly", "custom"] as ReportType[]).map((type) => (
+          {/* Step 1 — Group By */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Step 1 — Group By</p>
+            <div className="flex gap-2 flex-wrap">
               <button
-                key={type}
-                onClick={() => { setReportType(type); setReportData(null); }}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  reportType === type ? "bg-primary-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                onClick={() => { setReportMode("employee"); setFilterName(""); setReportData(null); }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition ${reportMode === "employee" ? "bg-primary-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              >
+                <User className="w-3.5 h-3.5" /> Employee
+              </button>
+              <button
+                onClick={() => { setReportMode("customer"); setFilterName(""); setReportData(null); }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition ${reportMode === "customer" ? "bg-orange-500 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              >
+                <Building2 className="w-3.5 h-3.5" /> Customer
+              </button>
+            </div>
+          </div>
+
+          {/* Step 2 — Select specific name (optional) */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+              Step 2 — {reportMode === "customer" ? "Select Customer" : "Select Employee"}{" "}
+              <span className="normal-case text-gray-300 font-normal">(optional — leave blank for all)</span>
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={filterName}
+                onChange={(e) => { setFilterName(e.target.value); setReportData(null); }}
+                className={`text-sm px-3 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition min-w-[220px] ${
+                  reportMode === "customer"
+                    ? "border-orange-200 bg-orange-50 text-orange-900"
+                    : "border-primary-200 bg-primary-50 text-primary-900"
                 }`}
               >
-                {type === "daily" ? "Daily" : type === "weekly" ? "Weekly" : "Custom Range"}
-              </button>
-            ))}
+                <option value="">
+                  {reportMode === "customer" ? "— All Customers —" : "— All Employees —"}
+                </option>
+                {reportMode === "customer"
+                  ? customers
+                      .filter((c, i, arr) => arr.findIndex(x => x.name === c.name) === i)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((c) => <option key={c.id} value={c.name}>{c.name}</option>)
+                  : [
+                      ...allSupervisors.map(s => ({ name: s, label: `${s} (Supervisor)` })),
+                      ...allEmployees.map(e => ({ name: e.name, label: e.name })),
+                    ]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((p) => <option key={p.name} value={p.name}>{p.label}</option>)
+                }
+              </select>
+              {filterName && (
+                <button
+                  onClick={() => { setFilterName(""); setReportData(null); }}
+                  className="text-xs font-semibold text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-2.5 rounded-xl transition"
+                >
+                  Clear
+                </button>
+              )}
+              {filterName && (
+                <span className={`text-xs font-bold px-3 py-2.5 rounded-xl ${reportMode === "customer" ? "bg-orange-100 text-orange-700" : "bg-primary-100 text-primary-700"}`}>
+                  {filterName}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Step 3 — Date Period */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Step 3 — Period</p>
+            <div className="flex gap-2 flex-wrap">
+              {(["daily", "weekly", "custom"] as ReportType[]).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => { setReportType(type); setReportData(null); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    reportType === type ? "bg-primary-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {type === "daily" ? "Daily" : type === "weekly" ? "Weekly" : "Custom Range"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {reportType === "custom" && (
@@ -765,10 +1048,10 @@ export default function ReportsPage() {
           <button
             onClick={generateReport}
             disabled={fetching}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition shadow-sm disabled:opacity-50 w-fit"
           >
             <RefreshCw className={`w-4 h-4 ${fetching ? "animate-spin" : ""}`} />
-            Generate Report
+            {filterName ? `Generate Report for ${filterName}` : "Generate Report"}
           </button>
         </div>
 
@@ -812,15 +1095,19 @@ export default function ReportsPage() {
             {/* Action bar */}
             <div className="flex items-center gap-3 flex-wrap">
               <div>
-                <p className="text-sm font-bold text-gray-700">{reportLabel}</p>
+                <p className="text-sm font-bold text-gray-700">
+                  {reportLabel} — {reportMode === "customer" ? "By Customer" : "By Employee"}
+                  {filterName && <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-lg ${reportMode === "customer" ? "bg-orange-100 text-orange-700" : "bg-primary-100 text-primary-700"}`}>{filterName}</span>}
+                </p>
                 <p className="text-xs text-gray-400">
                   {(() => { const { from, to } = getDateRange(); return from === to ? formatDate(from) : `${formatDate(from)} — ${formatDate(to)}`; })()}
                   {" · "}{reportData.length} task{reportData.length !== 1 ? "s" : ""}
-                  {" · "}{groupedReport.length} employee{groupedReport.length !== 1 ? "s" : ""}
+                  {!filterName && (reportMode === "customer"
+                    ? ` · ${groupedByCustomer.length} customer${groupedByCustomer.length !== 1 ? "s" : ""}`
+                    : ` · ${groupedReport.length} employee${groupedReport.length !== 1 ? "s" : ""}`)}
                 </p>
-
               </div>
-              {groupedReport.length > 0 && (
+              {(reportMode === "customer" ? groupedByCustomer.length > 0 : groupedReport.length > 0) && (
                 <div className="ml-auto flex gap-2 flex-wrap">
                   <button
                     onClick={downloadExcel}
@@ -841,13 +1128,103 @@ export default function ReportsPage() {
               )}
             </div>
 
+            {/* Report — grouped by customer */}
+            {reportMode === "customer" && (
+              <div ref={tableRef} className="space-y-3">
+                {visibleCustomerGroups.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-border p-12 text-center">
+                    <p className="text-4xl mb-3">📭</p>
+                    <p className="text-sm text-gray-400 font-medium">No data found for this period</p>
+                  </div>
+                ) : (
+                  visibleCustomerGroups.map((group) => {
+                    const done = group.tasks.filter(t => t.status === "Done").length;
+                    const total = group.tasks.length;
+                    const overdueCount = group.tasks.filter(t => isOverdue(t)).length;
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                    return (
+                      <div key={group.name} className="bg-white rounded-xl border border-border overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border-b border-orange-100">
+                          <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                            <Building2 className="w-3.5 h-3.5 text-orange-600" />
+                          </div>
+                          <span className={`text-xs font-bold ${group.name === "No Customer" ? "text-gray-400 italic" : "text-orange-800"}`}>{group.name}</span>
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <div className="w-20 bg-orange-100 rounded-full h-1">
+                              <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : "bg-yellow-400"}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[10px] font-semibold text-gray-500">{done}/{total}</span>
+                            {overdueCount > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{overdueCount} overdue</span>}
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs min-w-[800px]">
+                            <thead>
+                              <tr className="border-b border-border/50 bg-white">
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-6">#</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Task</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-28">Assignee</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Status</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Notes / Reason</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Due Date</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-16">Priority</th>
+                                <th className="text-left px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide w-24">Done %</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.tasks.map((t, idx) => {
+                                const ds = getDisplayStatus(t);
+                                const pct = getCompletionPct(t.status);
+                                const notes = getTaskNotes(t);
+                                return (
+                                  <tr key={t.id} className={`${STATUS_LEFT_BORDER[ds] || ""} border-b border-border/30 hover:bg-gray-50/50 transition`}>
+                                    <td className="px-3 py-2 text-[10px] text-gray-400 align-top">{idx + 1}</td>
+                                    <td className="px-3 py-2 align-top max-w-[200px]">
+                                      <p className="text-xs text-gray-800 font-medium leading-snug">{t.task}</p>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className="text-[11px] text-blue-600 font-medium">{t.assigned_to || t.supervisor || "—"}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[ds] || "bg-gray-100 text-gray-600"}`}>{ds}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top max-w-[200px]">
+                                      {notes ? <p className="text-[11px] text-gray-500 leading-relaxed">{notes}</p> : <span className="text-[11px] text-gray-300">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`text-[11px] ${isOverdue(t) ? "text-red-600 font-semibold" : "text-gray-500"}`}>{formatDate(t.due_date)}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <span className={`text-[11px] ${PRIORITY_COLOR[t.priority] || "text-gray-600"}`}>{t.priority}</span>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="bg-gray-200 rounded-full h-1 w-14">
+                                          <div className={`h-1 rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct > 0 ? "bg-yellow-400" : "bg-gray-300"}`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                        <span className="text-[11px] font-semibold text-gray-600">{pct}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
             {/* Report — grouped by employee */}
-            {(() => {
-              const withTasks = groupedReport.filter(g => g.tasks.length > 0);
-              const noTasks   = groupedReport.filter(g => g.tasks.length === 0);
+            {reportMode === "employee" && (() => {
+              const withTasks = visibleEmployeeGroups.filter(g => g.tasks.length > 0);
+              const noTasks   = filterName ? [] : groupedReport.filter(g => g.tasks.length === 0);
               return (
             <div ref={tableRef} className="space-y-3">
-              {groupedReport.length === 0 ? (
+              {visibleEmployeeGroups.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-border p-12 text-center">
                   <p className="text-4xl mb-3">📭</p>
                   <p className="text-sm text-gray-400 font-medium">No data found for this period</p>

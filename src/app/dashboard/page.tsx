@@ -117,7 +117,17 @@ export default function DashboardPage() {
   // When a customer is selected, the dashboard shows only that machine's data.
   const roleFiltered = filterCustomer === "All"
     ? roleFilteredAll
-    : roleFilteredAll.filter((t) => t.customer_id === filterCustomer);
+    : roleFilteredAll.filter((t) => {
+        if (t.customer_id) {
+          const cName = customers.find((c) => String(c.id) === String(t.customer_id))?.name;
+          if (cName === filterCustomer) return true;
+        }
+        if (t.project_id) {
+          const proj = projects.find((p) => String(p.id) === String(t.project_id));
+          if (proj?.customer_name === filterCustomer) return true;
+        }
+        return false;
+      });
 
   // Build a lookup: person name -> department
   const personDeptMap = new Map<string, string>();
@@ -291,11 +301,11 @@ export default function DashboardPage() {
                       <select value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}
                         className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border bg-white text-gray-700 cursor-pointer focus:outline-none">
                         <option value="All">All Customers / Machines</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}{c.machine_number ? ` — ${c.machine_number}` : ""}
-                          </option>
-                        ))}
+                        {customers
+                          .filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i)
+                          .map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ))}
                       </select>
                     )}
                   </div>
@@ -316,7 +326,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-3">
                   {filtered.length ? filtered.map((t) => (
-                    <TaskCard key={t.id} task={t} canEdit={canEditTask} canDelete={canDeleteTask}
+                    <TaskCard key={t.id} task={t} customerName={t.customer_id ? customers.find((c) => String(c.id) === String(t.customer_id))?.name : t.project_id ? projects.find((p) => String(p.id) === String(t.project_id))?.customer_name : undefined} canEdit={canEditTask} canDelete={canDeleteTask}
                       canChangeStatus={hasFullAccess || (isSupervisor && (t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!))) || (isEmployee && (t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!)))}
                       onStatusChange={handleStatusChange}
                       onPriorityChange={canEditTask ? handlePriorityChange : undefined}
@@ -407,10 +417,10 @@ export default function DashboardPage() {
         </div>
       )}
       <TaskModal open={taskModalOpen} task={editingTask} supervisors={modalSupervisors}
-        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} roleName={roleName}
+        employees={modalEmployees} projects={projects.filter((p) => p.status === "Active")} customers={customers} roleName={roleName}
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }} onSave={handleSave} />
       <ServiceTaskModal open={serviceModalOpen} task={serviceEditingTask}
-        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} roleName={roleName}
+        supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} customers={customers} roleName={roleName}
         onClose={() => { setServiceModalOpen(false); setServiceEditingTask(null); }} onSave={handleSaveService} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}

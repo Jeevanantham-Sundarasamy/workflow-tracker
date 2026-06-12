@@ -586,9 +586,9 @@ export default function PorterPage() {
     const taskDescription = [
       "Porter Booking",
       form.materials.length > 0 ? `Materials: ${form.materials.join(", ")}` : null,
-      `From: ${form.pickup_location.trim()}`,
+      `From: ${fromSupplier?.name || form.pickup_location.trim()}`,
       ...form.stops.map((s) => s.location.trim()).filter(Boolean).map((loc, i) => `Stop ${i + 1}: ${loc}`),
-      `To: ${form.drop_location.trim()}`,
+      `To: ${toSupplier?.name || form.drop_location.trim()}`,
       form.vehicle_type ? `Vehicle: ${form.vehicle_type}` : null,
     ].filter(Boolean).join(" | ");
 
@@ -678,8 +678,8 @@ export default function PorterPage() {
       const taskDescription = [
         `Porter Booking`,
         booking.materials.length > 0 ? `Materials: ${booking.materials.join(", ")}` : null,
-        `From: ${booking.pickup_location}`,
-        `To: ${booking.drop_location}`,
+        `From: ${booking.supplier_name || booking.pickup_location}`,
+        `To: ${booking.receiver_name || booking.drop_location}`,
         booking.vehicle_type ? `Vehicle: ${booking.vehicle_type}` : null,
       ].filter(Boolean).join(" | ");
 

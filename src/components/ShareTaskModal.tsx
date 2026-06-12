@@ -344,6 +344,25 @@ export default function ShareTaskModal({ open, tasks, onClose }: ShareTaskModalP
   );
 }
 
+function porterDisplayTitle(task: Task): string {
+  if (!task.task.startsWith("Porter Booking")) return task.task;
+  const fp = task.follow_up || "";
+  const supplier = fp.match(/Supplier:\s*([^|]+)/)?.[1]?.trim();
+  const receiver = fp.match(/Receiver:\s*([^|]+)/)?.[1]?.trim();
+  let title = task.task;
+  if (supplier) title = title.replace(/From:\s*[^|]+(\||$)/, (_, end) => `From: ${supplier}${end === "|" ? " | " : ""}`);
+  if (receiver) {
+    title = title.replace(/To:\s*[^|]+(\||$)/, (_, end) => `To: ${receiver}${end === "|" ? " | " : ""}`);
+  } else {
+    title = title.replace(/To:\s*([^|]+)(\||$)/, (_, addr, end) => {
+      const parts = addr.trim().split(",");
+      const short = parts.slice(0, 2).join(",").trim();
+      return `To: ${short}${end === "|" ? " | " : ""}`;
+    });
+  }
+  return title;
+}
+
 // Single task full preview
 function SingleTaskPreview({ task }: { task: Task }) {
   const priorityColor = task.priority === "High" ? "#ef4444" : task.priority === "Medium" ? "#f59e0b" : "#10b981";
@@ -354,7 +373,7 @@ function SingleTaskPreview({ task }: { task: Task }) {
           {task.priority.toUpperCase()}
         </div>
       </div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "8px 0 8px" }}>{task.task}</h3>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "8px 0 8px" }}>{porterDisplayTitle(task)}</h3>
       <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", rowGap: 6, fontSize: 13 }}>
         {task.assigned_to && (<>
           <div style={{ color: "#6b7280", fontWeight: 600 }}>Assigned to</div>
@@ -394,7 +413,7 @@ function MultiTaskRow({ task, index }: { task: Task; index: number }) {
           display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11, flexShrink: 0,
         }}>{index}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{task.task}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{porterDisplayTitle(task)}</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", fontSize: 11, color: "#6b7280" }}>
             {task.assigned_to && <span>To: <strong style={{ color: "#374151" }}>{task.assigned_to}</strong></span>}
             <span>Due: {formatDate(task.due_date)}</span>

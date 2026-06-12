@@ -9,8 +9,8 @@ import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  Plus, Search, Filter, Settings2, ChevronRight, Calendar, User,
-  Package, Clock, CheckCircle2, X, AlertTriangle, Pencil, Trash2,
+  Plus, Search, Settings2, ChevronRight, Calendar, User,
+  Package, CheckCircle2, X, AlertTriangle, Pencil, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import LoginRequired from "@/components/LoginRequired";
@@ -82,11 +82,16 @@ export default function ProductionPage() {
     return p.serial_number.toLowerCase().includes(q) || p.customer_name.toLowerCase().includes(q) || p.machine_type_name.toLowerCase().includes(q);
   };
 
-  const completedProjects = projects.filter((p) => p.status === "Completed" && matchesSearch(p));
+  const completedProjects = projects.filter((p) =>
+    p.status === "Completed" &&
+    (filterStatus === "All" || filterStatus === "Completed") &&
+    matchesSearch(p)
+  );
 
   const filtered = projects.filter((p) => {
     if (p.status === "Completed") return false;
-    if (filterStatus !== "All" && filterStatus !== "Completed" && p.status !== filterStatus) return false;
+    if (filterStatus === "Completed") return false;
+    if (filterStatus !== "All" && p.status !== filterStatus) return false;
     return matchesSearch(p);
   });
 
@@ -188,6 +193,16 @@ export default function ProductionPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
+  const colorTypeBadge = (ct: string) => {
+    const map: Record<string, string> = {
+      "4c": "bg-violet-100 text-violet-700",
+      "6c": "bg-blue-100 text-blue-700",
+      "8c": "bg-teal-100 text-teal-700",
+      "16c": "bg-orange-100 text-orange-700",
+    };
+    return map[ct] || "bg-gray-100 text-gray-600";
+  };
+
   return (
     <LoginRequired>
     <div className="flex flex-col min-h-screen">
@@ -216,37 +231,32 @@ export default function ProductionPage() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats — click to filter */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total", count: stats.total, color: "text-gray-900", bg: "bg-gray-50" },
-            { label: "Active", count: stats.active, color: "text-blue-600", bg: "bg-blue-50" },
-            { label: "Completed", count: stats.completed, color: "text-emerald-600", bg: "bg-emerald-50" },
-            { label: "On Hold", count: stats.onHold, color: "text-amber-600", bg: "bg-amber-50" },
-          ].map((s) => (
-            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border border-border`}>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">{s.label}</p>
-              <p className={`text-2xl font-black ${s.color}`}>{s.count}</p>
-            </div>
-          ))}
+            { label: "Total", value: "All", count: stats.total, color: "text-gray-900", bg: "bg-gray-50", ring: "ring-gray-400" },
+            { label: "Active", value: "Active", count: stats.active, color: "text-blue-600", bg: "bg-blue-50", ring: "ring-blue-400" },
+            { label: "Completed", value: "Completed", count: stats.completed, color: "text-emerald-600", bg: "bg-emerald-50", ring: "ring-emerald-400" },
+            { label: "On Hold", value: "On Hold", count: stats.onHold, color: "text-amber-600", bg: "bg-amber-50", ring: "ring-amber-400" },
+          ].map((s) => {
+            const active = filterStatus === s.value;
+            return (
+              <button key={s.label}
+                onClick={() => setFilterStatus(active ? "All" : s.value)}
+                className={`${s.bg} rounded-2xl p-4 border text-left transition-all ${active ? `ring-2 ${s.ring} border-transparent` : "border-border hover:shadow-sm"}`}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">{s.label}</p>
+                <p className={`text-2xl font-black ${s.color}`}>{s.count}</p>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Search + Filter */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search serial no, customer, machine type..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-gray-400" />
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-              className="text-xs font-semibold px-3 py-2.5 rounded-xl border border-border bg-white cursor-pointer focus:outline-none">
-              <option value="All">All Status</option>
-              {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search serial no, customer, machine type..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
         </div>
 
         {/* Completed Projects */}
@@ -271,6 +281,7 @@ export default function ProductionPage() {
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
                           <h3 className="text-sm font-bold text-gray-900 truncate">{p.serial_number}</h3>
                           <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{p.machine_type_name}</span>
+                          {p.color_type && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colorTypeBadge(p.color_type)}`}>{p.color_type}</span>}
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
                           <span className="flex items-center gap-1"><User className="w-3 h-3" />{p.customer_name}</span>
@@ -309,6 +320,7 @@ export default function ProductionPage() {
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="text-sm font-bold text-gray-900">{p.serial_number}</h3>
                         <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{p.machine_type_name}</span>
+                        {p.color_type && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colorTypeBadge(p.color_type)}`}>{p.color_type}</span>}
                         {isOverdue && <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5" /> Overdue</span>}
                       </div>
                       <div className="flex flex-wrap gap-3 text-xs text-gray-500">

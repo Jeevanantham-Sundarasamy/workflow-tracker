@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X, Share2, Truck } from "lucide-react";
+import { Calendar, User, Flag, Pencil, Trash2, MapPin, Eye, UserCircle, MessageSquare, X, Share2, Truck, Building2 } from "lucide-react";
 import { useState, memo } from "react";
 import type { Task } from "@/lib/types";
 import { STATUSES, PRIORITIES } from "@/lib/types";
@@ -20,6 +20,7 @@ interface TaskCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelect?: (id: string) => void;
+  customerName?: string;
 }
 
 const statusStyles: Record<string, string> = {
@@ -52,9 +53,31 @@ function TaskCard({
   selectable,
   selected,
   onSelect,
+  customerName,
 }: TaskCardProps) {
   const today = new Date().toISOString().split("T")[0];
   const isOverdue = task.status !== "Done" && task.status !== "Cancelled" && task.due_date < today;
+
+  // For Porter Booking tasks: replace raw addresses in From/To with supplier/receiver names from follow_up
+  const displayTitle = (() => {
+    if (!task.task.startsWith("Porter Booking")) return task.task;
+    const fp = task.follow_up || "";
+    const supplier = fp.match(/Supplier:\s*([^|]+)/)?.[1]?.trim();
+    const receiver = fp.match(/Receiver:\s*([^|]+)/)?.[1]?.trim();
+    let title = task.task;
+    if (supplier) title = title.replace(/From:\s*[^|]+(\||$)/, (_, end) => `From: ${supplier}${end === "|" ? " | " : ""}`);
+    if (receiver) {
+      title = title.replace(/To:\s*[^|]+(\||$)/, (_, end) => `To: ${receiver}${end === "|" ? " | " : ""}`);
+    } else {
+      // No receiver name stored — shorten raw address to first 2 comma-segments
+      title = title.replace(/To:\s*([^|]+)(\||$)/, (_, addr, end) => {
+        const parts = addr.trim().split(",");
+        const short = parts.slice(0, 2).join(",").trim();
+        return `To: ${short}${end === "|" ? " | " : ""}`;
+      });
+    }
+    return title;
+  })();
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("");
   const [comment, setComment] = useState("");
@@ -99,7 +122,7 @@ function TaskCard({
               />
             )}
             <h3 className="text-sm font-bold text-gray-900 truncate">
-              {task.task}
+              {displayTitle}
             </h3>
             {task.task_type === "service" && (
               <span className="text-[10px] font-bold uppercase tracking-widest text-white bg-blue-500 px-2.5 py-0.5 rounded-full flex items-center gap-1">
@@ -121,6 +144,16 @@ function TaskCard({
           {task.status}
         </span>
       </div>
+
+      {/* Customer Badge — highlighted separately above meta */}
+      {customerName && (
+        <div className="mb-2.5">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg">
+            <Building2 className="w-3.5 h-3.5 text-orange-500" />
+            {customerName}
+          </span>
+        </div>
+      )}
 
       {/* Meta */}
       <div className="flex flex-wrap gap-3 sm:gap-4 text-xs text-gray-500 mb-3">

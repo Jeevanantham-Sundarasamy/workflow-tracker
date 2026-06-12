@@ -13,6 +13,7 @@ interface ServiceTaskModalProps {
   employees?: { name: string; supervisor_names: string[] | null }[];
   supervisors?: string[];
   projects?: ProjectOption[];
+  customers?: { id: string; name: string }[];
   roleName?: string;
   onClose: () => void;
   onSave: (data: Omit<Task, "id" | "created_at">) => void;
@@ -24,6 +25,7 @@ export default function ServiceTaskModal({
   employees = [],
   supervisors = [],
   projects = [],
+  customers = [],
   roleName = "Admin",
   onClose,
   onSave,
@@ -35,6 +37,7 @@ export default function ServiceTaskModal({
     assigned_to_type: "employee" as "supervisor" | "employee",
     extra_assignees: [] as string[],
     project_id: "",
+    customer_id: "",
     due_date: "",
     status: "Pending" as Task["status"],
     location: "",
@@ -50,6 +53,7 @@ export default function ServiceTaskModal({
         assigned_to_type: task.assigned_to_type || "employee",
         extra_assignees: task.extra_assignees || [],
         project_id: task.project_id || "",
+        customer_id: task.customer_id || "",
         due_date: task.due_date,
         status: task.status,
         location: task.location || "",
@@ -63,6 +67,7 @@ export default function ServiceTaskModal({
         assigned_to_type: "employee",
         extra_assignees: [],
         project_id: "",
+        customer_id: "",
         due_date: "",
         status: "Pending",
         location: "",
@@ -99,6 +104,7 @@ export default function ServiceTaskModal({
       assigned_by: roleName,
       extra_assignees: form.extra_assignees.filter(Boolean).length > 0 ? form.extra_assignees.filter(Boolean) : null,
       project_id: form.project_id || null,
+      customer_id: form.customer_id || null,
       task_type: "service",
     });
   };
@@ -200,13 +206,31 @@ export default function ServiceTaskModal({
             {projects.length === 0 ? (
               <p className="text-xs text-gray-400 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">No active projects available.</p>
             ) : (
-              <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+              <select value={form.project_id}
+                onChange={(e) => {
+                  const proj = projects.find((p) => p.id === e.target.value);
+                  const matchedCustomer = proj ? customers.find((c) => c.name === proj.customer_name) : null;
+                  setForm({ ...form, project_id: e.target.value, customer_id: matchedCustomer?.id || form.customer_id });
+                }}
                 className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition">
                 <option value="">No project</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.serial_number} — {p.customer_name}</option>)}
               </select>
             )}
           </div>
+
+          {customers.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Customer</label>
+              <select value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition">
+                <option value="">No customer</option>
+                {customers.filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Due Date <span className="text-red-400">*</span></label>

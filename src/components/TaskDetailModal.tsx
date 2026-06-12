@@ -38,6 +38,7 @@ export default function TaskDetailModal({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [porterSuppliers, setPorterSuppliers] = useState<{ name: string; address: string }[]>([]);
 
   const loadData = useCallback(async () => {
     if (!task) return;
@@ -68,6 +69,13 @@ export default function TaskDetailModal({
       loadData();
       setTab("comments");
       setNewComment("");
+      if (task.task.startsWith("Porter Booking")) {
+        supabase.from("porter_suppliers").select("name, address").then(
+          (res: { data: { name: string; address: string }[] | null }) => {
+            setPorterSuppliers(res.data || []);
+          }
+        );
+      }
     }
   }, [open, task, loadData]);
 
@@ -167,6 +175,33 @@ export default function TaskDetailModal({
     { key: "files" as const, label: "Files", icon: Paperclip, count: attachments.length },
   ];
 
+  const displayTitle = (() => {
+    if (!task.task.startsWith("Porter Booking")) return task.task;
+    const fp = task.follow_up || "";
+    const supplier = fp.match(/Supplier:\s*([^|]+)/)?.[1]?.trim();
+    const receiver = fp.match(/Receiver:\s*([^|]+)/)?.[1]?.trim();
+    let title = task.task;
+    if (supplier) title = title.replace(/From:\s*[^|]+(\||$)/, (_, end) => `From: ${supplier}${end === "|" ? " | " : ""}`);
+    if (receiver) {
+      title = title.replace(/To:\s*[^|]+(\||$)/, (_, end) => `To: ${receiver}${end === "|" ? " | " : ""}`);
+    } else {
+      title = title.replace(/To:\s*([^|]+)(\||$)/, (_, addr, end) => {
+        const rawAddr = addr.trim();
+        // Try to match against known supplier addresses
+        const matched = porterSuppliers.find((s) => {
+          const sFirst = s.address.split(",")[0].trim().toLowerCase();
+          const aFirst = rawAddr.split(",")[0].trim().toLowerCase();
+          return sFirst && aFirst && (sFirst === aFirst || rawAddr.toLowerCase().startsWith(sFirst) || s.address.toLowerCase().startsWith(aFirst));
+        });
+        if (matched) return `To: ${matched.name}${end === "|" ? " | " : ""}`;
+        // Fallback: show first 2 comma-parts
+        const short = rawAddr.split(",").slice(0, 2).join(",").trim();
+        return `To: ${short}${end === "|" ? " | " : ""}`;
+      });
+    }
+    return title;
+  })();
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -176,7 +211,7 @@ export default function TaskDetailModal({
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-border">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 mb-2">{task.task}</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">{displayTitle}</h2>
             <div className="flex flex-wrap gap-3 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <User className="w-3 h-3" /> {task.supervisor}
