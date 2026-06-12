@@ -11,7 +11,8 @@ import { Plus, Search, Pencil, Trash2, X, Users } from "lucide-react";
 
 export default function CustomersPage() {
   const { toast } = useToast();
-  const { hasFullAccess, login } = useAuth();
+  const { hasFullAccess, isSupervisor, login } = useAuth();
+  const canManageCustomers = hasFullAccess || isSupervisor;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -100,7 +101,7 @@ export default function CustomersPage() {
             <h1 className="text-xl font-bold text-gray-900">Customers</h1>
             <p className="text-sm text-gray-400">{customers.length} total</p>
           </div>
-          {hasFullAccess && (
+          {canManageCustomers && (
             <button onClick={openNew}
               className="flex items-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2.5 rounded-xl transition shadow-sm">
               <Plus className="w-4 h-4" /> Add Customer
@@ -178,7 +179,7 @@ export default function CustomersPage() {
                       )}
                     </div>
                   </div>
-                  {hasFullAccess && (
+                  {canManageCustomers && (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button onClick={() => openEdit(c)} title="Edit"
                         className="w-8 h-8 rounded-lg hover:bg-primary-50 flex items-center justify-center text-gray-400 hover:text-primary-600 transition">

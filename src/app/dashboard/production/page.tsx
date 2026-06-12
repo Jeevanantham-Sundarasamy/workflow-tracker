@@ -436,14 +436,13 @@ export default function ProductionPage() {
                     <div>
                       <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Start Date <span className="text-red-400">*</span></label>
                       <input type="date" value={form.start_date}
-                        min={new Date().toLocaleDateString("en-CA")}
                         onChange={(e) => setForm({ ...form, start_date: e.target.value })}
                         className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Due Date <span className="text-red-400">*</span></label>
                       <input type="date" value={form.due_date}
-                        min={form.start_date || new Date().toLocaleDateString("en-CA")}
+                        min={form.start_date || undefined}
                         onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                         className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                     </div>
@@ -486,14 +485,13 @@ export default function ProductionPage() {
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Start Date</label>
                   <input type="date" value={editForm.start_date}
-                    min={new Date().toLocaleDateString("en-CA")}
                     onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Due Date</label>
                   <input type="date" value={editForm.due_date}
-                    min={editForm.start_date || new Date().toLocaleDateString("en-CA")}
+                    min={editForm.start_date || undefined}
                     onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
                 </div>
