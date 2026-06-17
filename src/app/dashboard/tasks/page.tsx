@@ -135,7 +135,7 @@ export default function TasksPage() {
   // Role-based task filtering
   const roleFiltered = tasks.filter((t) => {
     if (hasFullAccess) return true;
-    if (isSupervisor) return t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!);
+    if (isSupervisor) return t.task_type === "service" || t.supervisor === userName || (t.extra_assignees ?? []).includes(userName!);
     if (isEmployee) return t.assigned_to === userName || (t.extra_assignees ?? []).includes(userName!) || (hasTaskCreateAccess && t.created_by === userName);
     return true; // guest sees all
   });
