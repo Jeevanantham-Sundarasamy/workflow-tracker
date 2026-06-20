@@ -11,6 +11,7 @@ import Topbar from "@/components/Topbar";
 import TaskCard from "@/components/TaskCard";
 import TaskModal from "@/components/TaskModal";
 import ServiceTaskModal from "@/components/ServiceTaskModal";
+import PurchaseTaskModal from "@/components/PurchaseTaskModal";
 import TaskDetailModal from "@/components/TaskDetailModal";
 import ShareTaskModal from "@/components/ShareTaskModal";
 import PinModal from "@/components/PinModal";
@@ -42,8 +43,10 @@ export default function TasksPage() {
   const [taskTypeSelectOpen, setTaskTypeSelectOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [serviceEditingTask, setServiceEditingTask] = useState<Task | null>(null);
+  const [purchaseEditingTask, setPurchaseEditingTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [filterTaskType, setFilterTaskType] = useState("All");
   const [selectMode, setSelectMode] = useState(false);
@@ -161,7 +164,7 @@ export default function TasksPage() {
       }
       if (!matched) return false;
     }
-    if (filterTaskType !== "All" && (t.task_type || "production") !== filterTaskType) return false;
+    if (filterTaskType !== "All" && (t.task_type === "purchase" ? "purchase" : (t.task_type || "production")) !== filterTaskType) return false;
     if (search && !t.task.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom || dateTo) {
       const dateField = filterStatus === "Completed"
@@ -286,6 +289,23 @@ export default function TasksPage() {
     setServiceModalOpen(false); setServiceEditingTask(null);
   };
 
+  const handleSavePurchase = async (data: Omit<Task, "id" | "created_at">) => {
+    const actor = userName || "Manager";
+    if (purchaseEditingTask) {
+      const { data: updated, error } = await supabase.from("tasks").update(data).eq("id", purchaseEditingTask.id).select().single();
+      if (!error && updated) { setTasks((p) => p.map((t) => (t.id === purchaseEditingTask.id ? updated : t))); toast("Task updated", "success"); }
+    } else {
+      const { data: created, error } = await supabase.from("tasks").insert(data).select().single();
+      if (!error && created) { setTasks((p) => (p.some((x) => x.id === created.id) ? p : [created, ...p])); toast("Purchase task created", "success");
+        await logActivity(created.id, "created", `Created purchase task "${data.task}"`, actor);
+        const assigneeList = [data.assigned_to, ...(data.extra_assignees ?? [])].filter((n): n is string => !!n && n !== actor);
+        if (assigneeList.length > 0) await createNotification(`New purchase task "${data.task}"`, "success", created.id, assigneeList);
+        setShareTasks([created]); }
+      else if (error) { toast(`Creation failed: ${error.message}`, "error"); }
+    }
+    setPurchaseModalOpen(false); setPurchaseEditingTask(null);
+  };
+
   // For supervisor: only show their supervisors list (just themselves)
   const modalSupervisors = isSupervisor && !hasFullAccess ? [userName!] : [...managers, ...supervisors];
   // For supervisor: only show their team employees
@@ -364,6 +384,10 @@ export default function TasksPage() {
               className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterTaskType === "service" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600"}`}>
               Service
             </button>
+            <button onClick={() => setFilterTaskType("purchase")}
+              className={`text-xs font-bold px-3 py-2 rounded-lg transition ${filterTaskType === "purchase" ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-amber-50 hover:text-amber-600"}`}>
+              Purchase
+            </button>
           </div>
           {(!isEmployee || hasTaskCreateAccess) && (
             <select value={filterSup} onChange={(e) => setFilterSup(e.target.value)}
@@ -430,6 +454,7 @@ export default function TasksPage() {
                 onPriorityChange={(canEditTask || isMyCreatedTask) && !selectMode ? handlePriorityChange : undefined}
                 onEdit={(task) => {
                   if (task.task_type === "service") { setServiceEditingTask(task); setServiceModalOpen(true); }
+                  else if (task.task_type === "purchase") { setPurchaseEditingTask(task); setPurchaseModalOpen(true); }
                   else { setEditingTask(task); setTaskModalOpen(true); }
                 }}
                 onDelete={handleDelete}
@@ -452,7 +477,7 @@ export default function TasksPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-1">New Task</h2>
             <p className="text-sm text-gray-400 mb-5">What type of task are you creating?</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button onClick={() => { setTaskTypeSelectOpen(false); setTaskModalOpen(true); }}
                 className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-violet-200 hover:border-violet-500 hover:bg-violet-50 transition group">
                 <span className="text-2xl">⚙️</span>
@@ -465,6 +490,12 @@ export default function TasksPage() {
                 <span className="text-sm font-bold text-gray-800 group-hover:text-blue-700">Service</span>
                 <span className="text-[11px] text-gray-400 text-center">Field service & support tasks</span>
               </button>
+              <button onClick={() => { setTaskTypeSelectOpen(false); setPurchaseModalOpen(true); }}
+                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-amber-200 hover:border-amber-500 hover:bg-amber-50 transition group">
+                <span className="text-2xl">🛒</span>
+                <span className="text-sm font-bold text-gray-800 group-hover:text-amber-700">Purchase</span>
+                <span className="text-[11px] text-gray-400 text-center">Purchase & procurement tasks</span>
+              </button>
             </div>
           </div>
         </div>
@@ -475,6 +506,9 @@ export default function TasksPage() {
       <ServiceTaskModal open={serviceModalOpen} task={serviceEditingTask}
         supervisors={modalSupervisors} employees={modalEmployees} projects={projects.filter((p) => p.status === "Completed")} customers={customers} roleName={roleName}
         onClose={() => { setServiceModalOpen(false); setServiceEditingTask(null); }} onSave={handleSaveService} />
+      <PurchaseTaskModal open={purchaseModalOpen} task={purchaseEditingTask}
+        supervisors={modalSupervisors} employees={modalEmployees} roleName={roleName}
+        onClose={() => { setPurchaseModalOpen(false); setPurchaseEditingTask(null); }} onSave={handleSavePurchase} />
       <TaskDetailModal open={!!detailTask} task={detailTask} onClose={() => setDetailTask(null)} roleName={roleName} />
       <ShareTaskModal open={shareTasks.length > 0} tasks={shareTasks} onClose={() => setShareTasks([])} />
       <PinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)}

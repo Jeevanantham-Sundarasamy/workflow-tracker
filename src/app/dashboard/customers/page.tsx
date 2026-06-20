@@ -23,7 +23,7 @@ export default function CustomersPage() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("customers").select("*").order("name", { ascending: true });
     setCustomers(data || []);
     setLoading(false);
   }, []);
@@ -49,6 +49,10 @@ export default function CustomersPage() {
   const save = async () => {
     if (!form.name.trim()) {
       toast("Customer name is required", "error");
+      return;
+    }
+    if (!form.city.trim()) {
+      toast("Location (City) is required", "error");
       return;
     }
     const payload = {
@@ -235,7 +239,7 @@ export default function CustomersPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">City</label>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">City / Location <span className="text-red-500">*</span></label>
                 <input type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
                   placeholder="e.g. Tiruppur, Tamil Nadu"
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition" />
