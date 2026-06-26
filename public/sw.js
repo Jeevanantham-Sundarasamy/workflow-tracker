@@ -48,7 +48,9 @@ self.addEventListener("push", (event) => {
     badge: "/icon-192.png",
     tag: data.tag,
     data: { url: data.url || "/dashboard" },
-    requireInteraction: false,
+    requireInteraction: true,
+    vibrate: [200, 100, 200],
+    renotify: !!data.tag,
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
