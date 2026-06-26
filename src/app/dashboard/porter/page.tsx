@@ -8,6 +8,7 @@ import { PORTER_STATUSES, VEHICLE_TYPES } from "@/lib/types";
 import Topbar from "@/components/Topbar";
 import PinModal from "@/components/PinModal";
 import { useToast } from "@/components/ui/Toast";
+import { createNotification } from "@/lib/activity";
 import { toPng } from "html-to-image";
 import {
   Plus, X, Pencil, Trash2, MapPin, Phone, User,
@@ -643,6 +644,13 @@ export default function PorterPage() {
       toast(`Request failed: ${error.message}`, "error");
     } else {
       toast("Porter request sent successfully", "success");
+      const assigneeList = persons.map((p) => p.name);
+      await createNotification(
+        `New porter request from ${userName || "Unknown"}: ${taskDescription}`,
+        "info",
+        null,
+        assigneeList
+      );
       setModalOpen(false);
       setForm({ ...emptyForm });
       setFromSupplierSearch("");
@@ -716,6 +724,13 @@ export default function PorterPage() {
         toast(`Porter tasks creation failed: ${error.message}`, "error");
       } else {
         toast(`${tasks.length} porter task${tasks.length > 1 ? "s" : ""} created`, "success");
+        const assigneeList = persons.map((p) => p.name);
+        await createNotification(
+          `New porter booking from ${userName || "Unknown"}: ${taskDescription}`,
+          "info",
+          null,
+          assigneeList
+        );
       }
     } catch (err) {
       console.error("autoCreatePorterTasks error:", err);

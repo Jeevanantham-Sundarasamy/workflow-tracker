@@ -35,7 +35,28 @@ export default function PushNotificationProvider() {
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    // Listen for task assignments and status changes
+    // Listen for new task assignments (INSERT — covers porter tasks and other direct inserts)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const taskInsertChannel = supabase
+      .channel("push-tasks-insert")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          const newTask = payload.new as { task: string; assigned_to: string | null; extra_assignees: string[] | null };
+          const extras = newTask.extra_assignees ?? [];
+          const isAssignedToMe = !!newTask.assigned_to && newTask.assigned_to === userName;
+          const isExtraAssignee = !!userName && extras.includes(userName);
+          if (isAssignedToMe || isExtraAssignee) {
+            showPushNotification("Task Assigned to You", {
+              body: `"${newTask.task}" has been assigned to you`,
+              tag: `task-new-${payload.new.id}`,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen for task assignment changes and status changes (UPDATE)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taskChannel = supabase
       .channel("push-tasks")
@@ -139,6 +160,7 @@ export default function PushNotificationProvider() {
       .subscribe();
 
     return () => {
+      supabase.removeChannel(taskInsertChannel);
       supabase.removeChannel(taskChannel);
       supabase.removeChannel(leaveChannel);
       supabase.removeChannel(projectTaskChannel);
